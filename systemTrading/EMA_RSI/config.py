@@ -14,7 +14,7 @@ SYMBOLS = ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT", "AVAX/USDT"]
 
 # config.py
 
-# 각 티커별 상세 파라미터 설정 (Pro 모드에서 제안된 최적화 값 포함)
+# 각 티커별 상세 파라미터 설정 (튜닝 중인 경우, 튜닝 결과를 여기에 반영합니다.)
 SYMBOL_PARAMS = {
     "BTC/USDT": {
         "timeframe": "1h",
@@ -25,18 +25,18 @@ SYMBOL_PARAMS = {
         "ema_slow": 20,
         "rsi_period": 14,
         "rsi_threshold": 56,
-        "leverage": 5, # <--- 이 줄을 추가합니다.
+        "leverage": 5, 
     },
-    "ETH/USDT": {
+    "ETH/USDT": { # 2025.07.30에 튜닝함.
         "timeframe": "1h",
-        "tp": 0.08,
-        "sl": 0.03,
+        "tp": 0.03178,
+        "sl": 0.02499,
         "position_size": 0.01,
-        "ema_fast": 6,
-        "ema_slow": 22,
+        "ema_fast": 18,
+        "ema_slow": 26,
         "rsi_period": 14,
-        "rsi_threshold": 55,
-        "leverage": 5, # <--- 이 줄을 추가합니다.
+        "rsi_threshold": 64,
+        "leverage": 5, 
     },
     "XRP/USDT": {
         "timeframe": "1h",
@@ -47,7 +47,7 @@ SYMBOL_PARAMS = {
         "ema_slow": 25,
         "rsi_period": 14,
         "rsi_threshold": 60,
-        "leverage": 5, # <--- 이 줄을 추가합니다.
+        "leverage": 5, 
     },
     "SOL/USDT": {
         "timeframe": "1h",
@@ -58,7 +58,7 @@ SYMBOL_PARAMS = {
         "ema_slow": 20,
         "rsi_period": 14,
         "rsi_threshold": 58,
-        "leverage": 5, # <--- 이 줄을 추가합니다.
+        "leverage": 5, 
     },
     "AVAX/USDT": {
         "timeframe": "1h",
@@ -69,6 +69,6 @@ SYMBOL_PARAMS = {
         "ema_slow": 21,
         "rsi_period": 14,
         "rsi_threshold": 57,
-        "leverage": 5, # <--- 이 줄을 추가합니다.
+        "leverage": 5, 
     },
 }
