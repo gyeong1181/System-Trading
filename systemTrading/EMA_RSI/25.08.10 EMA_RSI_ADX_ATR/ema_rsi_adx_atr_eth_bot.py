@@ -33,7 +33,7 @@ PARAMS = dict(
 SCALEOUT_USE = True
 SCALEOUT_STEPS_ATR = [2.0, 3.5, 5.0]   # 엔트리 대비 +N*ATR에서 분할 익절(러너를 3등분)
 # 피라미딩 (본절 이후만, 안전선 확보 후 증액)
-PYRAMID_USE = False #                                                      @@@@@@@@@@@@@@@@@@@@@@@@@@@@ 피라미딩 사용 여부 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+PYRAMID_USE = False # Pyramid trading feature toggle
 PYRAMID_MAX = 2                        # 최대 2회
 PYRAMID_SIZE_FACTOR = 0.5              # 각 추가는 초기수량의 50%
 PYRAMID_MIN_PULLBACK_ATR = 0.8         # 직전 고점에서 ATR*0.8 이내 되돌림 후 재돌파 시
