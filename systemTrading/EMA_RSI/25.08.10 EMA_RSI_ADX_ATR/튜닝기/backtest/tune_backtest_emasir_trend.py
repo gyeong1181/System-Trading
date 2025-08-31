@@ -6,7 +6,7 @@ from backtest_emasir_trend import fetch_ohlcv, run_backtest, Params
 SYMBOL = 'BTC/USDT'
 TIMEFRAME = '1h'
 START = '2023-01-01'
-END = '2025-08-30'
+END = '2024-08-30'
 INITIAL_BAL = 10000
 
 print(f"데이터 로드: {SYMBOL} {TIMEFRAME} {START} ~ {END}")
@@ -17,8 +17,8 @@ def objective(trial):
     p = Params(
         ema_fast = trial.suggest_int('ema_fast', 5, 30),
         ema_slow = trial.suggest_int('ema_slow', 20, 80),
-        rsi_len  = trial.suggest_int('rsi_len', 8, 21),
-        rsi_thr  = trial.suggest_int('rsi_thr', 55, 75),
+        rsi_len  = 14,
+        rsi_thr  = 60,
         adx_len  = trial.suggest_int('adx_len', 10, 20),
         adx_thr  = trial.suggest_int('adx_thr', 18, 35),
         sig_max_bars = trial.suggest_int('sig_max_bars', 1, 4),
@@ -59,7 +59,7 @@ def objective(trial):
 # === 최적화 실행 ===
 if __name__ == "__main__":
     study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=50)
+    study.optimize(objective, n_trials=50) 
 
     print("\n=== 최적화 완료 ===")
     best_params = study.best_trial.params
