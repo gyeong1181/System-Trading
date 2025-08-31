@@ -4,6 +4,8 @@ from ta.trend import ema_indicator
 from ta.volatility import average_true_range
 from ta.momentum import rsi
 
+EPSILON = 1e-8  # 작은 수로 0 나누기 방지
+
 def enhanced_backtest_strategy(df, ema_fast, ema_slow, atr_len, atr_mult_sl, atr_mult_tp):
     df = df.copy()
     df['ema_fast'] = ema_indicator(df['close'], window=ema_fast)
@@ -81,10 +83,10 @@ def enhanced_backtest_strategy(df, ema_fast, ema_slow, atr_len, atr_mult_sl, atr
     # 샤프 비율
     sharpe = np.mean(returns) / np.std(returns) * np.sqrt(len(returns)) if np.std(returns) > 0 else 0
 
-   # 예를 들어 소티노 부분만 보완
+   # 예를 들어 소티노 비율 부분만 보완
     negative_returns = returns[returns < 0]
     if len(negative_returns) == 0:
-        downside_std = 1e-8  # 소량의 작은 수로 대체하여 0 나누기 방지
+        downside_std = EPSILON  # 소량의 작은 수로 대체하여 0 나누기 방지
     else:
         downside_std = np.std(negative_returns)
     sortino = np.mean(returns) / downside_std * np.sqrt(len(returns)) if downside_std > 0 else 0

@@ -5,7 +5,7 @@ from backtest_emasir_trend import fetch_ohlcv, run_backtest, Params
 # === 데이터 로드 설정 ===
 SYMBOL = 'BTC/USDT'
 TIMEFRAME = '1h'
-START = '2024-01-01'
+START = '2023-01-01'
 END = '2025-08-30'
 INITIAL_BAL = 10000
 
@@ -23,7 +23,7 @@ def objective(trial):
         adx_thr  = trial.suggest_int('adx_thr', 18, 35),
         sig_max_bars = trial.suggest_int('sig_max_bars', 1, 4),
         tp1_pct  = trial.suggest_float('tp1_pct', 0.01, 0.05),
-        tp1_part = trial.suggest_float('tp1_part', 0.3, 0.8),
+        tp1_part = trial.suggest_float('tp1_part', 0.05, 0.3),
         be_buffer= trial.suggest_float('be_buffer', 0.0005, 0.002),
         atr_mult = trial.suggest_float('atr_mult', 1.5, 4.0),
         fixed_sl_pct = trial.suggest_float('fixed_sl_pct', 0.015, 0.035),
