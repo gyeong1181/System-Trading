@@ -76,8 +76,8 @@ def objective(trial, df):
     ema_fast = trial.suggest_int('ema_fast', 5, 20)
     ema_slow = trial.suggest_int('ema_slow', 25, 80)
     rsi_len = 14
-    rsi_thr = trial.suggest_int('rsi_thr', 55, 65)
-    tp_perc = trial.suggest_float('tp_perc', 0.01, 0.05)
+    rsi_thr = trial.suggest_int('rsi_thr', 50, 70)
+    tp_perc = trial.suggest_float('tp_perc', 0.01, 0.07)
     sl_perc = trial.suggest_float('sl_perc', 0.005, 0.025)
 
     if ema_fast >= ema_slow:
