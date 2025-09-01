@@ -48,6 +48,7 @@ def adx(df,n=14):
 def prepare(df,p:Params):
     d=df.copy()
     d['ema_f']=ema(d['close'], p.ema_fast); d['ema_s']=ema(d['close'], p.ema_slow)
+    d['ema200']=ema(d['close'], 200)
     d['rsi']=rsi(d['close'], p.rsi_len); d['atr']=atr(d, p.adx_len); d['adx']=adx(d, p.adx_len)
     return d.dropna()
 
@@ -64,10 +65,11 @@ def run_backtest(df,p=Params(), initial=10000):
         fresh = (last_cross is not None) and (i-last_cross<=p.sig_max_bars)
         adx_ok = (cur.adx>p.adx_thr) if p.use_adx else True
         rsi_ok = (cur.rsi>p.rsi_thr) or (p.use_adx and cur.adx>p.adx_thr)
+        trend_up = cur.close > cur.ema200
 
         fee = p.fee_oneway
         # 진입
-        if (not pos) and fresh and adx_ok and rsi_ok:
+        if (not pos) and fresh and adx_ok and rsi_ok and trend_up:
             entry = cur.close*(1+p.slippage); pos=True; hit1=False
             tp1 = entry*(1+p.tp1_pct); runner = (1-p.tp1_part)
             trail = entry - (p.atr_mult*cur.atr if p.atr_mult else 0)
@@ -76,18 +78,24 @@ def run_backtest(df,p=Params(), initial=10000):
             bal *= (1-fee) # 진입 수수료
 
         if pos:
-            # 트레일 업데이트
-            if p.atr_mult: trail=max(trail, cur.close - p.atr_mult*cur.atr)
-            # TP1
-            if (not hit1) and (cur.high>=tp1):
-                exitp = tp1*(1-p.slippage); pnl = (p.tp1_part)*((exitp/entry)-1)
-                bal *= (1+pnl-fee); hit1=True; trail=max(trail, entry*(1+p.be_buffer))
-            # Stop / Runner 청산
-            stop_hit = trail is not None and cur.low<=trail
-            if stop_hit:
-                exitp = trail*(1-p.slippage); pnl = runner*((exitp/entry)-1)
+            # 추세 유지 필터 (ADX, EMA200)
+            if (cur.adx <= p.adx_thr if p.use_adx else False) or (cur.close <= cur.ema200):
+                exitp = cur.close*(1-p.slippage); pnl = (runner if hit1 else 1)*((exitp/entry)-1)
                 bal *= (1+pnl-fee); trades.append({'entry':entry,'exit':exitp,'tp1':hit1})
                 pos=False; entry=None; trail=None; runner=0.0
+            else:
+                # 트레일 업데이트
+                if p.atr_mult: trail=max(trail, cur.close - p.atr_mult*cur.atr)
+                # TP1
+                if (not hit1) and (cur.high>=tp1):
+                    exitp = tp1*(1-p.slippage); pnl = (p.tp1_part)*((exitp/entry)-1)
+                    bal *= (1+pnl-fee); hit1=True; trail=max(trail, entry*(1+p.be_buffer))
+                # Stop / Runner 청산
+                stop_hit = trail is not None and cur.low<=trail
+                if stop_hit:
+                    exitp = trail*(1-p.slippage); pnl = runner*((exitp/entry)-1)
+                    bal *= (1+pnl-fee); trades.append({'entry':entry,'exit':exitp,'tp1':hit1})
+                    pos=False; entry=None; trail=None; runner=0.0
 
         eq.append(bal)
 
