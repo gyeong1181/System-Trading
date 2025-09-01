@@ -17,7 +17,7 @@ RISK_PCT  = 0.01                 # 계좌 대비 1% 리스크
 PARAMS = dict(
     ema_fast=8, ema_slow=55,
     rsi_len=15, rsi_thr=59,
-    adx_len=12, adx_thr=22,
+    adx_len=12, adx_thr=25,
     sig_max_bars=3,
     tp1_pct=0.027851078724166922,    # TP1: +2.785%
     tp1_part=0.6924556665352782,     # TP1에서 69.2% 청산
@@ -114,6 +114,7 @@ def build_indicators(df):
     d=df.copy()
     d['ema_f']=ema(d['close'], p['ema_fast'])
     d['ema_s']=ema(d['close'], p['ema_slow'])
+    d['ema_200']=ema(d['close'], 200)
     d['rsi']=rsi(d['close'], p['rsi_len'])
     d['atr']=atr(d, p['adx_len'])
     d['adx']=adx(d, p['adx_len'])
@@ -211,6 +212,7 @@ def run():
             fresh = last_cross_idx is not None and (len(d)-1 - last_cross_idx) <= p['sig_max_bars']
             adx_ok = cur['adx'] > p['adx_thr']
             rsi_ok = (cur['rsi'] > p['rsi_thr']) or adx_ok
+            trend_up = cur['close'] > cur['ema_200']
 
             # 일일 손실 캡 체크 (PAPER 간이)
             if state['day_pnl'] <= -DAILY_LOSS_CAP_PCT:
@@ -219,7 +221,7 @@ def run():
 
             # === 진입 ===
             can_enter = (bar_index - state['last_entry_bar'] >= COOLDOWN_BARS)
-            if (not state['in_pos']) and fresh and adx_ok and rsi_ok and can_enter:
+            if (not state['in_pos']) and fresh and adx_ok and rsi_ok and trend_up and can_enter:
                 entry = float(cur['close'])*(1+p['slippage'])
                 sl = entry*(1 - p['fixed_sl_pct'])
                 tp1= entry*(1 + p['tp1_pct'])
@@ -258,6 +260,15 @@ def run():
                 trail = cur['close'] - p['atr_mult']*cur['atr']
                 be    = entry*(1 + p['be_buffer'])
                 trail_final = max(trail, be) if state['tp1_hit'] else max(trail, entry*(1-p['fixed_sl_pct']))
+
+                # 추세 유지 필터: ADX와 200EMA 조건 만족 못하면 즉시 청산
+                if (cur['adx'] <= p['adx_thr']) or (cur['close'] <= cur['ema_200']):
+                    exit_px = float(cur['close'])
+                    leftover = state['runner_qty'] if state['tp1_hit'] else qty
+                    state['day_pnl'] += ((exit_px/entry)-1)*(leftover/qty)
+                    state['in_pos'] = False
+                    send_telegram(f"⚠️ Trend filter exit @ {exit_px:.2f}")
+                    continue
 
                 # TP1 체결(PAPER 감지)
                 tp1_hit = state['tp1_hit']
