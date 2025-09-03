@@ -1,4 +1,4 @@
-# file: eth_live_bot_v2.py
+# EMA+RSI+ATR+ADX Trend Bot
 import os, time, math, logging, sys
 from datetime import datetime, timedelta, UTC
 from dotenv import load_dotenv
