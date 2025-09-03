@@ -1,0 +1,10 @@
+ccxt
+pandas
+numpy
+statsmodels
+ta
+vectorbt
+plotly
+python-dotenv
+pyyaml
+loguru
