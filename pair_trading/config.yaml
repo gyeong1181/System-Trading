@@ -1,0 +1,23 @@
+mode: backtest
+symbols:
+  btc: BTC/USDT
+  eth: ETH/USDT
+interval: 5m
+window: 90
+spread_method: cointegration
+z_entry: 2.0
+z_exit_half: 1.0
+z_exit_full: 0.3
+z_force_close_days: 10
+adx_threshold: 25
+risk_per_trade: 0.01
+strategy_allocation: 0.15
+kill_switch_mdd: -0.05
+leverage: 2
+slippage: 0.001
+fee: 0.0004
+history_limit: 1000
+live_limit: 200
+live_sleep: 60
+dry_run: true
+initial_capital: 10000
