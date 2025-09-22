@@ -1,4 +1,4 @@
-"""Binance market data helper utilities."""
+"""Utilities for fetching Binance spot candlestick data."""
 from __future__ import annotations
 
 import logging
@@ -8,16 +8,19 @@ from typing import Dict, Iterable, Optional
 
 import ccxt
 import pandas as pd
+from dotenv import load_dotenv
 
 BINANCE_API_KEY_ENV = "BINANCE_API_KEY"
 BINANCE_API_SECRET_ENV = "BINANCE_API_SECRET"
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class BinanceClient:
-    """Thin wrapper around :mod:`ccxt` for fetching OHLCV candles."""
+    """Small helper around :mod:`ccxt` for OHLCV retrieval."""
 
     timeframe: str = "15m"
     limit: int = 500
@@ -39,18 +42,10 @@ class BinanceClient:
 
         return ccxt.binance(client_config)
 
-    def fetch_ohlcv(self, symbol: str, *, timeframe: Optional[str] = None, limit: Optional[int] = None) -> pd.DataFrame:
-        """Return cleaned OHLCV data for ``symbol``.
-
-        Parameters
-        ----------
-        symbol:
-            Symbol in ccxt format (``"BTC/USDT"``).
-        timeframe:
-            Candle timeframe, defaults to the instance value.
-        limit:
-            Number of rows to request, defaults to the instance value.
-        """
+    def fetch_ohlcv(
+        self, symbol: str, *, timeframe: Optional[str] = None, limit: Optional[int] = None
+    ) -> pd.DataFrame:
+        """Return cleaned OHLCV candles for ``symbol``."""
 
         tf = timeframe or self.timeframe
         lm = limit or self.limit
@@ -77,7 +72,7 @@ class BinanceClient:
         return df
 
     def fetch_many(self, symbols: Iterable[str]) -> Dict[str, pd.DataFrame]:
-        """Fetch OHLCV candles for each symbol in ``symbols``."""
+        """Fetch OHLCV candles for every item in ``symbols``."""
 
         return {symbol: self.fetch_ohlcv(symbol) for symbol in symbols}
 
@@ -89,7 +84,7 @@ DEFAULT_SYMBOLS = {
 
 
 def fetch_btc_eth_15m(limit: int = 500) -> Dict[str, pd.DataFrame]:
-    """Convenience helper used by notebooks and scripts."""
+    """Convenience wrapper used by notebooks and scripts."""
 
     client = BinanceClient(timeframe="15m", limit=limit)
     data = {}
@@ -98,14 +93,13 @@ def fetch_btc_eth_15m(limit: int = 500) -> Dict[str, pd.DataFrame]:
     return data
 
 
-__all__ = [
-    "BinanceClient",
-    "fetch_btc_eth_15m",
-]
+__all__ = ["BinanceClient", "fetch_btc_eth_15m"]
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution helper
     logging.basicConfig(level=logging.INFO)
     frames = fetch_btc_eth_15m()
     for symbol, frame in frames.items():
-        logger.info("%s -> %s rows (%s - %s)", symbol, len(frame), frame.index.min(), frame.index.max())
+        logger.info(
+            "%s -> %s rows (%s - %s)", symbol, len(frame), frame.index.min(), frame.index.max()
+        )

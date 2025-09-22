@@ -3,5 +3,4 @@ pandas
 matplotlib
 ta
 python-telegram-bot
-backtrader
 python-dotenv
