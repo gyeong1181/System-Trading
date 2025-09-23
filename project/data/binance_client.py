@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, Optional, Union
 
 import ccxt
 import pandas as pd
@@ -93,7 +93,37 @@ def fetch_btc_eth_15m(limit: int = 500) -> Dict[str, pd.DataFrame]:
     return data
 
 
-__all__ = ["BinanceClient", "fetch_btc_eth_15m"]
+def fetch_recent_ohlcv(
+    symbol: str,
+    *,
+    timeframe: str = "15m",
+    limit: int = 500,
+    client: Optional[Union[ccxt.binance, "BinanceClient"]] = None,
+) -> pd.DataFrame:
+    """Functional wrapper kept for backward compatibility.
+
+    Parameters
+    ----------
+    symbol:
+        Market pair to download (``"BTC/USDT"`` style symbol).
+    timeframe:
+        Candle interval. Defaults to 15분봉.
+    limit:
+        Number of rows to request from the exchange.
+    client:
+        Existing ccxt client or :class:`BinanceClient` instance. A fresh
+        client is created when omitted.
+    """
+
+    if isinstance(client, BinanceClient):
+        binance_client = client
+    else:
+        binance_client = BinanceClient(timeframe=timeframe, limit=limit, client=client)
+
+    return binance_client.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+
+
+__all__ = ["BinanceClient", "fetch_recent_ohlcv", "fetch_btc_eth_15m"]
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution helper
