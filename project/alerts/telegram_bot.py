@@ -92,4 +92,18 @@ class TelegramNotifier:
             if "asyncio.run()" not in str(exc):
                 raise
 
-            self._run_in_background_loop(_send_and_log)
+            try:
+                loop = asyncio.new_event_loop()
+                try:
+                    coro = _send_and_log()
+                    try:
+                        loop.run_until_complete(coro)
+                    except RuntimeError:
+                        coro.close()
+                        raise
+                finally:
+                    loop.close()
+            except TelegramError:
+                return
+            except RuntimeError:
+                self._run_in_background_loop(_send_and_log)
