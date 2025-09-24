@@ -41,7 +41,7 @@ project/
 
 4. **노트북 점검**
    ```bash
-   jupyter notebook notebooks/step1_test.ipynb
+   jupyter notebook notebooks/step1_data_chart.ipynb
    ```
    - 데이터 다운로드가 막히면 자동으로 더미 데이터를 생성해 차트를 확인할 수 있습니다.
 
