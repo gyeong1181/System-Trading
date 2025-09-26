@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import AsyncMock, Mock, patch
-
-import asyncio
+from unittest.mock import AsyncMock, patch
 
 from telegram.error import TelegramError
 
@@ -25,53 +23,6 @@ class TelegramNotifierTests(unittest.TestCase):
                 bot_instance.send_message.await_args.kwargs,
                 {"chat_id": "chat", "text": "hello", "parse_mode": None, "disable_notification": False},
             )
-
-    def test_send_trade_alert_handles_running_loop_error(self) -> None:
-        with patch("project.alerts.telegram_bot.Bot") as bot_cls:
-            bot_instance = bot_cls.return_value
-            bot_instance.send_message = AsyncMock()
-
-            def fake_background_runner(coro_factory):
-                loop = asyncio.new_event_loop()
-                try:
-                    loop.run_until_complete(coro_factory())
-                finally:
-                    loop.close()
-
-            background_runner = Mock(side_effect=fake_background_runner)
-
-            def fake_asyncio_run(coro):
-                coro.close()
-                raise RuntimeError("asyncio.run() cannot be called from a running event loop")
-
-            loop_mock = Mock()
-            loop_mock.run_until_complete.side_effect = RuntimeError(
-                "Cannot run the event loop while another loop is running"
-            )
-
-            real_new_event_loop = asyncio.new_event_loop
-
-            def new_event_loop_side_effect():
-                if not hasattr(new_event_loop_side_effect, "called"):
-                    new_event_loop_side_effect.called = True
-                    return loop_mock
-                return real_new_event_loop()
-
-            with (
-                patch("project.alerts.telegram_bot.asyncio.run", new=fake_asyncio_run),
-                patch(
-                    "project.alerts.telegram_bot.asyncio.new_event_loop",
-                    side_effect=new_event_loop_side_effect,
-                ),
-                patch.object(TelegramNotifier, "_run_in_background_loop", new=background_runner),
-            ):
-                notifier = TelegramNotifier(bot_token="token", chat_id="chat")
-                notifier.send_trade_alert("hello")
-
-            background_runner.assert_called_once()
-            loop_mock.run_until_complete.assert_called_once()
-            loop_mock.close.assert_called_once()
-            bot_instance.send_message.assert_awaited_once()
 
     def test_send_trade_alert_logs_telegram_error(self) -> None:
         with patch("project.alerts.telegram_bot.Bot") as bot_cls, self.assertLogs(

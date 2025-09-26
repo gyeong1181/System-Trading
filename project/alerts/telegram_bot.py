@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
-from typing import Callable, Coroutine, Optional
+from typing import Optional
 
 from telegram import Bot
 from telegram.error import TelegramError
@@ -43,37 +42,6 @@ class TelegramNotifier:
             disable_notification=self._disable_notification,
         )
 
-    def _run_in_background_loop(
-        self, coro_factory: Callable[[], Coroutine[object, object, None]]
-    ) -> None:
-        """Execute ``coro_factory`` in a fresh event loop on a worker thread."""
-
-        error: Optional[BaseException] = None
-
-        def _runner() -> None:
-            nonlocal error
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(coro_factory())
-            except BaseException as exc:  # pragma: no cover - defensive guard
-                error = exc
-            finally:
-                loop.close()
-
-        thread = threading.Thread(target=_runner, name="TelegramNotifierLoop")
-        thread.start()
-        thread.join()
-
-        if error is None:
-            return
-
-        if isinstance(error, TelegramError):
-            # The coroutine already logged the failure.
-            return
-
-        raise error
-
     def send_trade_alert(self, message: str) -> None:
         """Send a trade alert message to Telegram and await its completion."""
 
@@ -92,18 +60,10 @@ class TelegramNotifier:
             if "asyncio.run()" not in str(exc):
                 raise
 
+            loop = asyncio.new_event_loop()
             try:
-                loop = asyncio.new_event_loop()
-                try:
-                    coro = _send_and_log()
-                    try:
-                        loop.run_until_complete(coro)
-                    except RuntimeError:
-                        coro.close()
-                        raise
-                finally:
-                    loop.close()
+                loop.run_until_complete(_send_and_log())
             except TelegramError:
                 return
-            except RuntimeError:
-                self._run_in_background_loop(_send_and_log)
+            finally:
+                loop.close()
