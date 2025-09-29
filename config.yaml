@@ -2,7 +2,16 @@ mode: backtest
 symbols:
   btc: BTC/USDT
   eth: ETH/USDT
+timeframes:
+  - 1h
+  - 15m
+  - 5m
 timeframe: 5m
+data_limit: 240
+duplicate_window_minutes: 120
+direction_window_minutes: 90
+min_signal_score: 55
+log_dir: logs
 spread_method: cointegration
 entry_z: 1.5
 exit_z_partial: 1.0
@@ -17,6 +26,17 @@ enable_regime_filter: true
 adx_threshold: 25
 leverage: 1
 dry_run: true
+risk:
+  base_leverage: 5
+  max_leverage: 7
+  bet_size_pct: 7
+  risk_reward: 2.1
+alerts:
+  telegram:
+    token: ""
+    chat_id: ""
+    parse_mode: "Markdown"
+    disable_notification: false
 backtest_since: "2023-01-01"
 backtest_to: "2025-08-31"
 timezone: "Asia/Seoul"

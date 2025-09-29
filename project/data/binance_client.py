@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 import ccxt
 import pandas as pd
@@ -21,6 +21,12 @@ def _create_binance_client() -> ccxt.binance:
         client_config.update({"apiKey": api_key, "secret": api_secret})
 
     return ccxt.binance(client_config)
+
+
+def create_binance_client() -> ccxt.binance:
+    """Public wrapper to instantiate a Binance client with environment credentials."""
+
+    return _create_binance_client()
 
 
 def fetch_recent_ohlcv(
@@ -76,9 +82,35 @@ def fetch_btc_eth_15m(
     }
 
 
+def fetch_timeframes(
+    symbols: Dict[str, str],
+    timeframes: Iterable[str],
+    *,
+    limit: int = 240,
+    client: Optional[ccxt.binance] = None,
+) -> Dict[str, Dict[str, pd.DataFrame]]:
+    """Fetch OHLCV data for multiple symbols and timeframes in a single call."""
+
+    client = client or _create_binance_client()
+    results: Dict[str, Dict[str, pd.DataFrame]] = {}
+    for timeframe in timeframes:
+        frame_results: Dict[str, pd.DataFrame] = {}
+        for alias, market in symbols.items():
+            frame_results[alias] = fetch_recent_ohlcv(
+                market,
+                timeframe=str(timeframe),
+                limit=limit,
+                client=client,
+            )
+        results[str(timeframe)] = frame_results
+    return results
+
+
 __all__ = [
+    "create_binance_client",
     "fetch_recent_ohlcv",
     "fetch_btc_eth_15m",
+    "fetch_timeframes",
 ]
 
 
