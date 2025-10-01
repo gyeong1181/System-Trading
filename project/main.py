@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
 import time
 from datetime import datetime, timedelta, timezone
@@ -95,8 +96,12 @@ def _seconds_until_next_cycle(timeframes: list[str], now: Optional[datetime] = N
     now = now or datetime.now(timezone.utc)
     minutes = min(_timeframe_to_minutes(tf) for tf in timeframes)
     interval = max(60, minutes * 60)
-    aligned = (now.replace(second=0, microsecond=0) + timedelta(seconds=interval))
-    wait_seconds = max(30, int((aligned - now).total_seconds()))
+    interval_delta = timedelta(seconds=interval)
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    elapsed = now - epoch
+    remainder = elapsed % interval_delta
+    wait_delta = interval_delta - remainder if remainder else timedelta(0)
+    wait_seconds = max(30, math.ceil(wait_delta.total_seconds()))
     return wait_seconds
 
 

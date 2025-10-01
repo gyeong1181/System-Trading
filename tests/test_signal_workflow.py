@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from project.alerts import build_alert_message
 from project.configuration import RiskConfig
+from project.main import _seconds_until_next_cycle
 from project.consensus import SignalDeduplicator, mark_optimal_signals
 from project.risk import RiskAdvisor
 from project.signals.models import Signal
@@ -64,4 +65,22 @@ def test_mark_optimal_and_formatting() -> None:
     assert "기타 신호 요약" in message
     assert "중복 2회" in message
     assert "레버리지: x7" in message or "레버리지: x" in message
+
+
+def test_seconds_until_next_cycle_aligns_to_shortest_timeframe() -> None:
+    now = datetime(2024, 1, 1, 12, 7, 10, tzinfo=timezone.utc)
+    wait = _seconds_until_next_cycle(["5m", "15m"], now=now)
+    assert wait == 170
+
+
+def test_seconds_until_next_cycle_respects_primary_interval() -> None:
+    now = datetime(2024, 1, 1, 12, 7, 10, tzinfo=timezone.utc)
+    wait = _seconds_until_next_cycle(["15m"], now=now)
+    assert wait == 470
+
+
+def test_seconds_until_next_cycle_enforces_minimum_wait() -> None:
+    now = datetime(2024, 1, 1, 12, 5, tzinfo=timezone.utc)
+    wait = _seconds_until_next_cycle(["5m"], now=now)
+    assert wait == 30
 
