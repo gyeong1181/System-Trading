@@ -5,10 +5,17 @@ import argparse
 import logging
 import math
 import os
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+
+if __package__ in (None, ""):
+    project_root = Path(__file__).resolve().parents[1]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
 
 from project.alerts import TelegramNotifier, build_alert_message
 from project.configuration import Settings, load_settings
