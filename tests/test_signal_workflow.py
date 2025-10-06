@@ -15,10 +15,23 @@ def _make_signal(**kwargs) -> Signal:
         symbol="BTCUSDT",
         direction="long",
         timeframe="15m",
-        score=72,
+        score=78,
         grade="추천",
         timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
-        metadata={"momentum": 0.01},
+        metadata={
+            "momentum": 0.012,
+            "trend_strength": 0.015,
+            "atr": 45.0,
+            "atr_pct": 0.008,
+            "risk_reward": 2.1,
+            "conditions": ["기술적 분석", "온체인/고래"],
+            "summary": ["모멘텀 1.2%", "EMA 갭 1.5%"],
+            "categories": {
+                "기술적 분석": {"value": 82.0, "weight": 0.3, "notes": []},
+                "온체인/고래": {"value": 74.0, "weight": 0.25, "notes": []},
+            },
+            "orderbook_bias": "매수벽 강함",
+        },
     )
     defaults.update(kwargs)
     return Signal(**defaults)
@@ -49,7 +62,7 @@ def test_mark_optimal_and_formatting() -> None:
         RiskConfig(base_leverage=5, max_leverage=7, bet_size_pct=7, risk_reward=2.1)
     )
     primary = _make_signal(symbol="BTCUSDT", score=86, grade="강력")
-    secondary = _make_signal(symbol="ETHUSDT", score=68, grade="추천")
+    secondary = _make_signal(symbol="ETHUSDT", score=70, grade="관심")
     signals = [primary, secondary]
     mark_optimal_signals(signals)
 
@@ -64,7 +77,26 @@ def test_mark_optimal_and_formatting() -> None:
     assert "최적 신호: ✅" in message
     assert "기타 신호 요약" in message
     assert "중복 2회" in message
-    assert "레버리지: x7" in message or "레버리지: x" in message
+    assert "추천 레버리지" in message
+    assert "근거 요약" in message
+
+
+def test_seconds_until_next_cycle_aligns_to_shortest_timeframe() -> None:
+    now = datetime(2024, 1, 1, 12, 7, 10, tzinfo=timezone.utc)
+    wait = _seconds_until_next_cycle(["5m", "15m"], now=now)
+    assert wait == 170
+
+
+def test_seconds_until_next_cycle_respects_primary_interval() -> None:
+    now = datetime(2024, 1, 1, 12, 7, 10, tzinfo=timezone.utc)
+    wait = _seconds_until_next_cycle(["15m"], now=now)
+    assert wait == 470
+
+
+def test_seconds_until_next_cycle_enforces_minimum_wait() -> None:
+    now = datetime(2024, 1, 1, 12, 5, tzinfo=timezone.utc)
+    wait = _seconds_until_next_cycle(["5m"], now=now)
+    assert wait == 30
 
 
 def test_seconds_until_next_cycle_aligns_to_shortest_timeframe() -> None:
