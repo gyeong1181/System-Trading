@@ -7,24 +7,9 @@ from typing import Dict, List
 import pandas as pd
 
 from project.configuration import RuntimeConfig
-from project.scoring import ScoreComponents, calculate_score, determine_grade
+from project.data.context import AnalysisContext
+from project.scoring import calculate_composite_score, determine_grade
 from project.signals.models import Signal
-
-
-def _direction_from_components(timeframe: str, components: ScoreComponents) -> str | None:
-    momentum = components.momentum
-    trend = components.trend_strength
-    tf = timeframe.lower()
-    if tf in {"5m", "15m"}:
-        threshold = 0.0006
-    else:
-        threshold = 0.0012
-
-    if momentum > threshold and trend >= 0:
-        return "long"
-    if momentum < -threshold and trend <= 0:
-        return "short"
-    return None
 
 
 def _prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -40,6 +25,7 @@ def generate_signals(
     timeframe: str,
     runtime: RuntimeConfig,
     as_of: datetime,
+    context: AnalysisContext,
 ) -> List[Signal]:
     signals: List[Signal] = []
     for symbol, df in market_data.items():
@@ -47,17 +33,39 @@ def generate_signals(
         if len(prepared) < 30:
             continue
 
-        score, components = calculate_score(prepared)
+        composite = calculate_composite_score(symbol, timeframe, prepared, context)
+        score = composite.total
         if score < runtime.min_score:
             continue
 
-        direction = _direction_from_components(timeframe, components)
-        if direction is None:
+        if len(composite.conditions) < 2:
             continue
 
+        if composite.risk_reward < 1.5:
+            continue
+
+        direction = composite.bias
         grade = determine_grade(score)
-        metadata = components.as_dict()
-        metadata.update({"timeframe": timeframe})
+        categories = {
+            category.label: {
+                "value": round(category.value, 2),
+                "weight": category.weight,
+                "notes": list(category.notes),
+            }
+            for category in composite.categories.values()
+        }
+        metadata = {
+            "timeframe": timeframe,
+            "momentum": composite.momentum,
+            "trend_strength": composite.trend_strength,
+            "atr": composite.atr,
+            "atr_pct": composite.atr_pct,
+            "risk_reward": round(composite.risk_reward, 2),
+            "categories": categories,
+            "conditions": list(composite.conditions),
+            "summary": list(composite.summary),
+            "orderbook_bias": context.heatmap_bias(),
+        }
         signal = Signal(
             symbol=symbol,
             direction=direction,

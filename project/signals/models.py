@@ -34,5 +34,9 @@ class Signal:
     def direction_label(self) -> str:
         return "롱" if self.direction.lower() == "long" else "숏"
 
+    @property
+    def conditions(self) -> list[str]:
+        return list(self.metadata.get("conditions", []))
+
 
 __all__ = ["Signal"]
