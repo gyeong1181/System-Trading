@@ -3,18 +3,31 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+if __package__ in (None, ""):
+    project_root = Path(__file__).resolve().parents[1]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+
 from project.alerts import TelegramNotifier, build_alert_message
 from project.configuration import Settings, load_settings
 from project.consensus import SignalDeduplicator, mark_optimal_signals
 from project.data.binance_client import create_binance_client, fetch_timeframes
+from project.data.context import AnalysisContext
+from project.data.external import ExternalMetrics, load_external_metrics
+from project.data.signal_store import SignalStore
 from project.risk import RiskAdvisor
+from project.risk.controller import RiskController
 from project.signals.generator import generate_signals
+from project.utils.timeframes import to_minutes
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
@@ -80,23 +93,16 @@ def _build_notifier(
     return LoggingNotifier()
 
 
-def _timeframe_to_minutes(value: str) -> int:
-    value = value.strip().lower()
-    if value.endswith("m"):
-        return max(1, int(value[:-1]))
-    if value.endswith("h"):
-        return max(1, int(value[:-1]) * 60)
-    if value.endswith("d"):
-        return max(1, int(value[:-1]) * 60 * 24)
-    return max(1, int(value))
-
-
 def _seconds_until_next_cycle(timeframes: list[str], now: Optional[datetime] = None) -> int:
     now = now or datetime.now(timezone.utc)
-    minutes = min(_timeframe_to_minutes(tf) for tf in timeframes)
+    minutes = min(to_minutes(tf) for tf in timeframes)
     interval = max(60, minutes * 60)
-    aligned = (now.replace(second=0, microsecond=0) + timedelta(seconds=interval))
-    wait_seconds = max(30, int((aligned - now).total_seconds()))
+    interval_delta = timedelta(seconds=interval)
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    elapsed = now - epoch
+    remainder = elapsed % interval_delta
+    wait_delta = interval_delta - remainder if remainder else timedelta(0)
+    wait_seconds = max(30, math.ceil(wait_delta.total_seconds()))
     return wait_seconds
 
 
@@ -106,6 +112,9 @@ def _run_signal_cycle(
     notifier: TelegramNotifier | LoggingNotifier,
     deduplicator: SignalDeduplicator,
     risk_advisor: RiskAdvisor,
+    risk_controller: RiskController,
+    signal_store: SignalStore,
+    external_metrics: ExternalMetrics,
     client,
 ) -> bool:
     as_of = datetime.now(timezone.utc)
@@ -120,6 +129,7 @@ def _run_signal_cycle(
         LOGGER.exception("Failed to fetch market data: %s", exc)
         return False
 
+    analysis_context = AnalysisContext(market_data, external_metrics)
     signals = []
     for timeframe, per_symbol in market_data.items():
         signals.extend(
@@ -128,6 +138,7 @@ def _run_signal_cycle(
                 timeframe=timeframe,
                 runtime=settings.runtime,
                 as_of=as_of,
+                context=analysis_context,
             )
         )
 
@@ -139,18 +150,50 @@ def _run_signal_cycle(
     deduplicator.apply(signals, as_of)
     mark_optimal_signals(signals)
 
-    message = build_alert_message(signals, risk_advisor)
+    eligible: list = []
+    for signal in signals:
+        recommendation = risk_advisor.recommend(signal)
+        signal.metadata.setdefault("risk_recommendation", recommendation.as_dict())
+        if recommendation.risk_reward < 1.5:
+            LOGGER.debug(
+                "Discarding %s %s due to low risk/reward %.2f",
+                signal.symbol,
+                signal.timeframe,
+                recommendation.risk_reward,
+            )
+            continue
+        if not risk_controller.can_execute(recommendation):
+            LOGGER.info(
+                "Risk controller blocked %s %s due to drawdown guard.",
+                signal.symbol,
+                signal.timeframe,
+            )
+            continue
+        if not signal.is_duplicate or signal.is_optimal:
+            risk_controller.reserve(recommendation)
+        eligible.append(signal)
+
+    if not eligible:
+        LOGGER.info("Signals generated but risk filters blocked dispatch.")
+        deduplicator.prune(as_of)
+        risk_controller.persist()
+        return False
+
+    message = build_alert_message(eligible, risk_advisor)
     if not message.strip():
         LOGGER.debug("Generated empty alert message; nothing to dispatch.")
         deduplicator.prune(as_of)
+        risk_controller.persist()
         return False
 
     notifier.send_trade_alert(message)
     LOGGER.info(
         "Dispatched %d signals across %d timeframes.",
-        len(signals),
+        len(eligible),
         len(settings.runtime.timeframes),
     )
+    signal_store.append(eligible, as_of)
+    risk_controller.persist()
     deduplicator.prune(as_of)
     return True
 
@@ -264,16 +307,29 @@ def main(argv: Optional[list[str]] = None) -> int:
         direction_window=timedelta(minutes=settings.runtime.direction_window_minutes),
     )
     risk_advisor = RiskAdvisor(settings.risk)
+    log_dir = settings.alerts.log_path.parent
+    signal_store = SignalStore(log_dir / "signals.csv")
+    risk_controller = RiskController(log_dir / "risk_state.json")
+    metrics_candidate = None
+    for suffix in ("yaml", "yml", "json"):
+        candidate = log_dir / f"external_metrics.{suffix}"
+        if candidate.exists():
+            metrics_candidate = candidate
+            break
     client = create_binance_client()
 
     iterations = 0
     while True:
         try:
+            external_metrics = load_external_metrics(metrics_candidate)
             _run_signal_cycle(
                 settings=settings,
                 notifier=notifier,
                 deduplicator=deduplicator,
                 risk_advisor=risk_advisor,
+                risk_controller=risk_controller,
+                signal_store=signal_store,
+                external_metrics=external_metrics,
                 client=client,
             )
         except Exception:  # pragma: no cover - defensive catch

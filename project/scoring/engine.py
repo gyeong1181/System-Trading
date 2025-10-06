@@ -1,96 +1,368 @@
-"""Functions for turning market data into numerical scores."""
+"""Composite scoring for the full-option signal engine."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
 
+from project.data.context import AnalysisContext
+
+
+FIB_LEVELS = (0.382, 0.5, 0.618, 0.786)
+FIB_EXTENSION = (1.272, 1.618, 2.618)
+
 
 @dataclass(frozen=True)
-class ScoreComponents:
-    """Breakdown of the numerical score for diagnostics."""
+class CategoryScore:
+    key: str
+    label: str
+    weight: float
+    value: float
+    notes: Tuple[str, ...]
 
+    @property
+    def weighted(self) -> float:
+        return self.value * self.weight
+
+
+@dataclass(frozen=True)
+class CompositeScore:
+    total: int
+    bias: str
+    categories: Dict[str, CategoryScore]
+    conditions: Tuple[str, ...]
     momentum: float
     trend_strength: float
-    volatility: float
-    volume_ratio: float
-
-    def as_dict(self) -> Dict[str, float]:
-        return {
-            "momentum": self.momentum,
-            "trend_strength": self.trend_strength,
-            "volatility": self.volatility,
-            "volume_ratio": self.volume_ratio,
-        }
+    atr: float
+    atr_pct: float
+    risk_reward: float
+    summary: Tuple[str, ...]
 
 
-def _safe_pct_change(values: pd.Series) -> float:
-    if len(values) < 2:
-        return 0.0
-    prev = values.iloc[-2]
-    curr = values.iloc[-1]
-    if prev == 0:
-        return 0.0
-    return float((curr - prev) / prev)
+def _ema(series: pd.Series, period: int) -> pd.Series:
+    return series.ewm(span=max(1, period), adjust=False).mean()
 
 
-def _rolling_std(series: pd.Series, window: int) -> float:
-    if len(series) < window:
-        return float(series.std(ddof=0) or 0.0)
-    return float(series.pct_change().rolling(window).std(ddof=0).iloc[-1] or 0.0)
+def _rsi(series: pd.Series, period: int = 14) -> float:
+    if len(series) < period + 1:
+        return 50.0
+    delta = series.diff()
+    ups = delta.clip(lower=0)
+    downs = -delta.clip(upper=0)
+    avg_gain = ups.ewm(alpha=1 / period, adjust=False).mean()
+    avg_loss = downs.ewm(alpha=1 / period, adjust=False).mean()
+    rs = avg_gain.iloc[-1] / max(1e-9, avg_loss.iloc[-1])
+    rsi = 100 - (100 / (1 + rs))
+    return float(np.nan_to_num(rsi, nan=50.0))
 
 
-def _volume_ratio(series: pd.Series, window: int = 30) -> float:
-    if len(series) < window:
-        return 0.0
-    recent = float(series.iloc[-1])
-    baseline = float(series.rolling(window).mean().iloc[-1] or 0.0)
-    if baseline == 0.0:
-        return 0.0
-    return recent / baseline
-
-
-def calculate_score(df: pd.DataFrame) -> Tuple[int, ScoreComponents]:
-    """Return a 0-99 score and diagnostic components for the given data frame."""
-
+def _atr(df: pd.DataFrame, period: int = 14) -> float:
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
     close = df["close"].astype(float)
-    volume = df["volume"].astype(float)
-    ma_window = min(55, max(20, len(close) // 4))
-    momentum = _safe_pct_change(close)
-    rolling_mean = close.rolling(ma_window).mean()
-    trend_strength = 0.0
-    if not np.isnan(rolling_mean.iloc[-1]):
-        trend_strength = float((close.iloc[-1] - rolling_mean.iloc[-1]) / close.iloc[-1])
-    volatility = _rolling_std(close, window=ma_window // 2)
-    volume_ratio = _volume_ratio(volume)
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [
+            (high - low),
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    atr = tr.rolling(period).mean().iloc[-1]
+    return float(np.nan_to_num(atr or 0.0, nan=0.0))
 
-    components = ScoreComponents(
-        momentum=momentum,
-        trend_strength=trend_strength,
-        volatility=volatility,
-        volume_ratio=volume_ratio,
+
+def _normalise(value: float, floor: float, ceiling: float) -> float:
+    if ceiling == floor:
+        return 0.5
+    scaled = (value - floor) / (ceiling - floor)
+    return float(np.clip(scaled, 0.0, 1.0))
+
+
+def _nearest_fib(ratio: float) -> Tuple[float, float]:
+    candidates = FIB_LEVELS + FIB_EXTENSION
+    best = min(candidates, key=lambda level: abs(level - ratio))
+    return best, abs(best - ratio)
+
+
+def _fibonacci_notes(close: float, swing_high: float, swing_low: float) -> Tuple[float, List[str]]:
+    notes: List[str] = []
+    if swing_high <= swing_low:
+        return 0.5, notes
+    retracement = (close - swing_low) / max(1e-9, swing_high - swing_low)
+    level, distance = _nearest_fib(retracement)
+    if level in FIB_LEVELS:
+        notes.append(f"피보나치 되돌림 {level*100:.1f}% 근접")
+    else:
+        notes.append(f"피보나치 확장 {level*100:.1f}% 근접")
+    score = max(0.0, 1.0 - distance * 4)
+    return score, notes
+
+
+def _technical_category(
+    symbol: str,
+    timeframe: str,
+    df: pd.DataFrame,
+    context: AnalysisContext,
+) -> Tuple[CategoryScore, float, float, float, float, List[str], Tuple[int, int]]:
+    close = df["close"].astype(float)
+    momentum = float((close.iloc[-1] - close.iloc[-10]) / close.iloc[-10]) if len(close) >= 10 else 0.0
+    ema_fast = _ema(close, 21)
+    ema_slow = _ema(close, 55)
+    trend_strength = float((ema_fast.iloc[-1] - ema_slow.iloc[-1]) / max(1e-9, close.iloc[-1]))
+    rsi = _rsi(close)
+    atr = _atr(df)
+    atr_pct = atr / max(1e-9, close.iloc[-1])
+
+    swing_high = float(df["high"].astype(float).rolling(30).max().iloc[-1])
+    swing_low = float(df["low"].astype(float).rolling(30).min().iloc[-1])
+    fib_score, fib_notes = _fibonacci_notes(close.iloc[-1], swing_high, swing_low)
+
+    momentum_score = _normalise(momentum, -0.04, 0.06) * 45
+    trend_score = _normalise(trend_strength, -0.03, 0.04) * 30
+    rsi_score = _normalise(rsi, 35, 65) * 10
+    fib_bonus = fib_score * 10
+
+    direction = "long" if momentum + trend_strength >= 0 else "short"
+    confirmations = context.multi_timeframe_confirmation(symbol, timeframe, direction)
+    mtf_bonus = 0.0
+    if confirmations[1] > 0:
+        mtf_bonus = (confirmations[0] / confirmations[1]) * 15
+
+    orderbook_bias = context.heatmap_bias()
+    heatmap_bonus = 5.0 if orderbook_bias == "매수벽 강함" and direction == "long" else 0.0
+    if orderbook_bias == "매도벽 강함" and direction == "short":
+        heatmap_bonus = 5.0
+
+    total = momentum_score + trend_score + rsi_score + fib_bonus + mtf_bonus + heatmap_bonus
+    value = float(np.clip(total, 0.0, 99.0))
+
+    notes = [
+        f"모멘텀 {momentum*100:.2f}%",
+        f"EMA 갭 {trend_strength*100:.2f}%",
+        f"RSI {rsi:.1f}",
+        *fib_notes,
+    ]
+    if confirmations[1] > 0:
+        notes.append(f"상위 타임프레임 일치 {confirmations[0]}/{confirmations[1]}")
+    notes.append(f"오더북: {orderbook_bias}")
+
+    category = CategoryScore(
+        key="technical",
+        label="기술적 분석",
+        weight=0.30,
+        value=value,
+        notes=tuple(notes),
+    )
+    return category, momentum, trend_strength, atr, atr_pct, notes, confirmations
+
+
+def _onchain_category(external) -> CategoryScore:
+    inflow = 1 - float(external.exchange_inflow_index)
+    outflow = float(external.exchange_outflow_index)
+    whale = float(external.whale_activity_index)
+    mvrv = float(external.mvrv_zscore)
+    mvrv_score = _normalise(-abs(mvrv), -5.0, 0.0)
+    score = (
+        inflow * 0.35
+        + outflow * 0.25
+        + whale * 0.25
+        + mvrv_score * 0.15
+    ) * 99
+    notes = [
+        f"거래소 순유출 지수 {outflow:.2f}",
+        f"고래 활동 {whale:.2f}",
+        f"MVRV Z-score {mvrv:.2f}",
+    ]
+    return CategoryScore(
+        key="onchain",
+        label="온체인/고래",
+        weight=0.25,
+        value=float(np.clip(score, 0.0, 99.0)),
+        notes=tuple(notes),
     )
 
-    score = 50
-    score += int(np.clip(momentum * 4200, -35, 45))
-    score += int(np.clip(trend_strength * 3000, -25, 25))
-    score += int(np.clip((volatility or 0.0) * 900, 0, 20))
-    score += int(np.clip((volume_ratio - 1.0) * 18, -10, 20))
 
-    bounded_score = max(0, min(99, score))
-    return bounded_score, components
+def _micro_category(context: AnalysisContext) -> CategoryScore:
+    ext = context.external
+    funding = float(ext.funding_rate)
+    oi = float(ext.open_interest_change)
+    skew = float(ext.options_skew)
+    max_pain = float(ext.max_pain_distance)
+    heatmap = ext.orderbook_heatmap
+
+    funding_score = _normalise(-abs(funding), -0.03, 0.0)
+    oi_score = _normalise(oi, -0.1, 0.1)
+    skew_score = _normalise(-abs(skew), -0.2, 0.0)
+    max_pain_score = _normalise(-abs(max_pain), -0.15, 0.0)
+    heatmap_score = _normalise(heatmap, 0.2, 0.8)
+
+    combined = (
+        funding_score * 0.2
+        + oi_score * 0.25
+        + skew_score * 0.2
+        + max_pain_score * 0.15
+        + heatmap_score * 0.2
+    ) * 99
+    notes = [
+        f"펀딩비 {funding:.4f}",
+        f"OI 변화 {oi:.2f}",
+        f"옵션 스큐 {skew:.2f}",
+        f"Max Pain 괴리 {max_pain:.2f}",
+        f"파이어차트 지수 {heatmap:.2f}",
+    ]
+    return CategoryScore(
+        key="microstructure",
+        label="시장 미시구조",
+        weight=0.20,
+        value=float(np.clip(combined, 0.0, 99.0)),
+        notes=tuple(notes),
+    )
+
+
+def _sentiment_category(external) -> CategoryScore:
+    fear = float(external.fear_greed)
+    trends = float(external.google_trends)
+    volume_sentiment = float(external.volume_sentiment)
+    social = float(external.social_sentiment + external.twitter_sentiment + external.reddit_sentiment + external.telegram_sentiment) / 4
+
+    score = (
+        _normalise(fear, 30, 80) * 0.4
+        + _normalise(trends, 20, 90) * 0.25
+        + volume_sentiment * 0.2
+        + _normalise(social, -1.0, 1.0) * 0.15
+    ) * 99
+    notes = [
+        f"Fear&Greed {fear:.1f}",
+        f"구글 트렌드 {trends:.1f}",
+        f"거래량 감성 {volume_sentiment:.2f}",
+        f"SNS 합성 {social:.2f}",
+    ]
+    return CategoryScore(
+        key="sentiment",
+        label="투자심리/SNS",
+        weight=0.10,
+        value=float(np.clip(score, 0.0, 99.0)),
+        notes=tuple(notes),
+    )
+
+
+def _macro_category(external) -> CategoryScore:
+    dxy = float(external.dxy_trend)
+    rates = float(external.rates_trend)
+    sp500 = float(external.sp500_trend)
+    vix = float(external.vix_level)
+    score = (
+        _normalise(-dxy, -2.0, 2.0) * 0.3
+        + _normalise(-rates, -1.5, 1.5) * 0.2
+        + _normalise(sp500, -2.0, 2.0) * 0.3
+        + _normalise(-vix, -10.0, 5.0) * 0.2
+    ) * 99
+    notes = [
+        f"DXY 추세 {dxy:.2f}",
+        f"금리 변화 {rates:.2f}",
+        f"S&P500 변화 {sp500:.2f}",
+        f"VIX 수준 {vix:.2f}",
+    ]
+    return CategoryScore(
+        key="macro",
+        label="매크로 글로벌",
+        weight=0.10,
+        value=float(np.clip(score, 0.0, 99.0)),
+        notes=tuple(notes),
+    )
+
+
+def _consensus_category(external) -> CategoryScore:
+    pro_bias = float(external.pro_trader_bias)
+    score = _normalise(pro_bias, -1.0, 1.0) * 99
+    notes = [f"트레이더 컨센서스 {pro_bias:.2f}"]
+    return CategoryScore(
+        key="consensus",
+        label="초고수 컨센서스",
+        weight=0.05,
+        value=float(np.clip(score, 0.0, 99.0)),
+        notes=tuple(notes),
+    )
+
+
+def _derive_conditions(categories: Dict[str, CategoryScore], confirmations: Tuple[int, int]) -> List[str]:
+    conditions: List[str] = []
+    for key, category in categories.items():
+        if category.value >= 65:
+            conditions.append(f"{category.label}")
+    if confirmations[1] > 0 and confirmations[0] >= 1:
+        conditions.append("멀티타임프레임 컨펌")
+    return conditions
+
+
+def calculate_composite_score(
+    symbol: str,
+    timeframe: str,
+    df: pd.DataFrame,
+    context: AnalysisContext,
+) -> CompositeScore:
+    tech, momentum, trend_strength, atr, atr_pct, tech_notes, confirmations = _technical_category(
+        symbol, timeframe, df, context
+    )
+    onchain = _onchain_category(context.external)
+    micro = _micro_category(context)
+    sentiment = _sentiment_category(context.external)
+    macro = _macro_category(context.external)
+    consensus = _consensus_category(context.external)
+
+    categories = {
+        tech.key: tech,
+        onchain.key: onchain,
+        micro.key: micro,
+        sentiment.key: sentiment,
+        macro.key: macro,
+        consensus.key: consensus,
+    }
+    weighted_sum = sum(category.weighted for category in categories.values())
+    total = int(np.clip(round(weighted_sum), 0, 99))
+
+    bias = "long" if momentum + trend_strength >= 0 else "short"
+    atr_pct_value = float(atr_pct)
+    volatility = atr_pct_value
+    trend_intensity = abs(momentum) * 120 + abs(trend_strength) * 80
+    score_factor = max(0.5, total / 100)
+    volatility_factor = max(0.6, min(2.5, 0.5 / max(0.005, volatility)))
+    risk_reward = max(1.2, min(4.0, (trend_intensity + score_factor) * volatility_factor))
+
+    summary: List[str] = []
+    summary.extend(tech.notes[:2])
+    summary.append(f"ATR {atr:.2f} ({atr_pct_value*100:.2f}%)")
+    summary.append(onchain.notes[0])
+    summary.append(micro.notes[0])
+
+    conditions = _derive_conditions(categories, confirmations)
+
+    return CompositeScore(
+        total=total,
+        bias=bias,
+        categories=categories,
+        conditions=tuple(conditions),
+        momentum=float(momentum),
+        trend_strength=float(trend_strength),
+        atr=float(atr),
+        atr_pct=atr_pct_value,
+        risk_reward=float(risk_reward),
+        summary=tuple(summary),
+    )
 
 
 def determine_grade(score: int) -> str:
-    """Map a numerical score to a qualitative grade."""
-
     if score >= 85:
         return "강력"
-    if score >= 60:
+    if score >= 75:
         return "추천"
-    return "관심"
+    if score >= 65:
+        return "관심"
+    return "관망"
 
 
-__all__ = ["ScoreComponents", "calculate_score", "determine_grade"]
+__all__ = ["CategoryScore", "CompositeScore", "calculate_composite_score", "determine_grade"]
