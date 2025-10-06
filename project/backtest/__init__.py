@@ -1,3 +1,5 @@
-"""Placeholder package for backtesting utilities."""
+"""Backtest helpers package."""
 
-__all__: list[str] = []
+from .runner import BacktestResult, run_replay
+
+__all__ = ["BacktestResult", "run_replay"]
