@@ -55,9 +55,10 @@ class RiskAdvisor:
             "추천": 1.0,
             "관심": 0.7,
         }.get(grade, 0.6)
-        base_bet = min(1.0, self._config.bet_size_pct)
+        configured_bet = max(0.0, float(self._config.bet_size_pct))
+        base_bet = min(100.0, configured_bet)
         bet_pct = max(0.5, base_bet * bet_multiplier * volatility_penalty)
-        bet_pct = min(1.0, bet_pct)
+        bet_pct = min(100.0, bet_pct)
         risk_reward = float(signal.metadata.get("risk_reward", self._config.risk_reward))
         if signal.direction.lower() == "short":
             risk_reward = round(risk_reward * 0.95, 2)

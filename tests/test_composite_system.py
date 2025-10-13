@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from project.data.context import AnalysisContext
 from project.data.external import ExternalMetrics
@@ -79,9 +80,13 @@ def test_risk_advisor_and_controller(tmp_path) -> None:
         metadata={"atr_pct": 0.012, "risk_reward": 2.2},
     )
     recommendation = advisor.recommend(signal)
-    assert recommendation.bet_pct <= 1.0
-    controller = RiskController(tmp_path / "risk.json")
+    assert recommendation.bet_pct == pytest.approx(risk_config.bet_size_pct, rel=0.01)
+    controller = RiskController(
+        tmp_path / "risk.json", daily_limit=10.0, weekly_limit=20.0
+    )
     assert controller.can_execute(recommendation)
     controller.reserve(recommendation)
-    controller.reserve(RiskRecommendation(leverage=5, bet_pct=1.0, risk_reward=2.0))
-    assert not controller.can_execute(RiskRecommendation(leverage=5, bet_pct=1.0, risk_reward=2.0))
+    controller.reserve(RiskRecommendation(leverage=5, bet_pct=3.0, risk_reward=2.0))
+    assert not controller.can_execute(
+        RiskRecommendation(leverage=5, bet_pct=0.5, risk_reward=2.0)
+    )
