@@ -22,3 +22,11 @@ reports/
 # 운영체제에서 자동으로 생성하는 파일
 .DS_Store # macOS
 Thumbs.db # Windows
+
+# Ignore runtime risk state files
+**/risk_state.json
+
+# Backups and CI artifacts
+backups/
+*.bak
+*.tmp
