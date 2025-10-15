@@ -25,3 +25,8 @@ Thumbs.db # Windows
 
 # Ignore runtime risk state files
 **/risk_state.json
+
+# Backups and CI artifacts
+backups/
+*.bak
+*.tmp
