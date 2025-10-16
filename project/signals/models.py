@@ -32,7 +32,7 @@ class Signal:
 
     @property
     def direction_label(self) -> str:
-        return "롱" if self.direction.lower() == "long" else "숏"
+        return "LONG" if self.direction.lower() == "long" else "SHORT"
 
     @property
     def conditions(self) -> list[str]:

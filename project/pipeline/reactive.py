@@ -5,12 +5,13 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import List, Optional
 
 from project.alerts import build_alert_message
 from project.consensus import SignalDeduplicator, mark_optimal_signals
+from project.configuration import RuntimeConfig
 from project.data.context import AnalysisContext
-from project.data.external import ExternalMetrics, load_external_metrics
+from project.data.external import load_external_metrics
 from project.data.score_tracker import ScoreTracker
 from project.data.signal_repository import SignalRepository
 from project.events.calendar import EventCalendar
@@ -34,6 +35,7 @@ class ReactiveEngine:
         timeframes: list[str],
         client,
         notifier,
+        runtime: RuntimeConfig,
         score_tracker: ScoreTracker,
         repository: SignalRepository,
         outcome_tracker: OutcomeTracker,
@@ -52,6 +54,7 @@ class ReactiveEngine:
         self._timeframes = timeframes
         self._client = client
         self._notifier = notifier
+        self._runtime = runtime
         self._data_limit = data_limit
         self._score_tracker = score_tracker
         self._repository = repository
@@ -68,6 +71,8 @@ class ReactiveEngine:
 
     async def run_once(self) -> bool:
         now = datetime.now(timezone.utc)
+        self._outcome_tracker.process_due_jobs(self._client)
+
         if self._event_calendar.is_blackout(now):
             LOGGER.info("Run aborted due to macro event blackout window.")
             self._repository.record(
@@ -111,6 +116,7 @@ class ReactiveEngine:
                 generate_signals(
                     per_symbol,
                     timeframe=timeframe,
+                    runtime=self._runtime,
                     as_of=now,
                     context=context,
                 )
@@ -134,6 +140,7 @@ class ReactiveEngine:
             )
             signal.metadata["score_delta"] = snapshot.delta
             signal.metadata["score_rolling"] = snapshot.rolling_avg
+            signal.metadata.setdefault("market", self._symbols.get(signal.symbol, signal.symbol))
             reasons: List[str] = []
             if snapshot.delta < self._delta_threshold and len(signal.conditions) < self._min_conditions:
                 reasons.append("insufficient_delta_conditions")

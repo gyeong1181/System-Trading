@@ -29,7 +29,9 @@ dry_run: true
 risk:
   base_leverage: 5
   max_leverage: 7
-  bet_size_pct: 7
+  bet_size_pct: 1.8
+  daily_loss_limit: 4.0
+  weekly_loss_limit: 10.0
   risk_reward: 2.1
 alerts:
   telegram:

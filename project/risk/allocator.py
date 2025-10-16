@@ -30,8 +30,9 @@ class RiskAdvisor:
 
     def recommend(self, signal: Signal) -> RiskRecommendation:
         grade = signal.grade
-        base_lev = self._config.base_leverage
+        base_leverage = self._config.base_leverage
         atr_pct = float(signal.metadata.get("atr_pct", 0.01) or 0.01)
+
         volatility_penalty = 1.0
         if atr_pct > 0.05:
             volatility_penalty = 0.5
@@ -41,23 +42,28 @@ class RiskAdvisor:
             volatility_penalty = 0.85
 
         leverage_multiplier = {
-            "강력": 1.4,
-            "추천": 1.0,
-            "관심": 0.7,
+            "strong": 1.4,
+            "high": 1.1,
+            "opportunity": 0.85,
+            "observe": 0.6,
         }.get(grade, 0.6)
         leverage = min(
             self._config.max_leverage,
-            base_lev * leverage_multiplier * max(0.6, volatility_penalty * 1.1),
+            base_leverage * leverage_multiplier * max(0.6, volatility_penalty * 1.1),
         )
 
         bet_multiplier = {
-            "강력": 1.3,
-            "추천": 1.0,
-            "관심": 0.7,
+            "strong": 1.25,
+            "high": 1.05,
+            "opportunity": 0.8,
+            "observe": 0.6,
         }.get(grade, 0.6)
-        base_bet = min(1.0, self._config.bet_size_pct)
+        base_bet = self._config.bet_size_pct
+        if base_bet <= 1:
+            base_bet *= 100
         bet_pct = max(0.5, base_bet * bet_multiplier * volatility_penalty)
-        bet_pct = min(1.0, bet_pct)
+        bet_pct = min(self._config.bet_size_pct, bet_pct)
+
         risk_reward = float(signal.metadata.get("risk_reward", self._config.risk_reward))
         if signal.direction.lower() == "short":
             risk_reward = round(risk_reward * 0.95, 2)
