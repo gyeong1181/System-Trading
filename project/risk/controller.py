@@ -36,11 +36,11 @@ class _RiskState:
 class RiskController:
     """Enforces daily/weekly loss caps for the automated engine."""
 
-    def __init__(self, path: Path, *, daily_limit: float = 2.0, weekly_limit: float = 5.0) -> None:
+    def __init__(self, path: Path, *, daily_limit: float, weekly_limit: float) -> None:
         self._path = path
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._daily_limit = daily_limit
-        self._weekly_limit = weekly_limit
+        self._daily_limit = self._normalise_pct(daily_limit)
+        self._weekly_limit = self._normalise_pct(weekly_limit)
         self._state = self._load_state()
 
     def _load_state(self) -> _RiskState:
@@ -50,6 +50,8 @@ class RiskController:
                 when = datetime.now(timezone.utc)
                 state = _RiskState(**payload)
                 state.reset_if_needed(when)
+                state.daily_loss = self._normalise_pct(state.daily_loss)
+                state.weekly_loss = self._normalise_pct(state.weekly_loss)
                 return state
             except Exception:
                 pass
@@ -58,7 +60,7 @@ class RiskController:
     def can_execute(self, recommendation: RiskRecommendation) -> bool:
         now = datetime.now(timezone.utc)
         self._state.reset_if_needed(now)
-        projected_loss = float(recommendation.bet_pct or 0.0)
+        projected_loss = self._normalise_pct(float(recommendation.bet_pct or 0.0))
         if self._state.daily_loss + projected_loss > self._daily_limit:
             return False
         if self._state.weekly_loss + projected_loss > self._weekly_limit:
@@ -68,12 +70,20 @@ class RiskController:
     def reserve(self, recommendation: RiskRecommendation) -> None:
         now = datetime.now(timezone.utc)
         self._state.reset_if_needed(now)
-        projected_loss = float(recommendation.bet_pct or 0.0)
+        projected_loss = self._normalise_pct(float(recommendation.bet_pct or 0.0))
         self._state.daily_loss += projected_loss
         self._state.weekly_loss += projected_loss
 
     def persist(self) -> None:
         self._path.write_text(json.dumps(asdict(self._state)), encoding="utf-8")
+
+    @staticmethod
+    def _normalise_pct(value: float) -> float:
+        """Normalise percentage inputs (expects values expressed in percent)."""
+
+        if value <= 0:
+            return 0.0
+        return value / 100.0
 
 
 __all__ = ["RiskController"]

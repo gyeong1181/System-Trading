@@ -60,7 +60,11 @@ class AnalysisContext:
         ema_fast = _ema(close, 12)
         ema_slow = _ema(close, 48)
         diff = ema_fast.iloc[-1] - ema_slow.iloc[-1]
-        slope = float((ema_fast.iloc[-1] - ema_fast.iloc[-5]) / max(1e-9, ema_fast.iloc[-5])) if len(ema_fast) > 5 else 0.0
+        slope = (
+            float((ema_fast.iloc[-1] - ema_fast.iloc[-5]) / max(1e-9, ema_fast.iloc[-5]))
+            if len(ema_fast) > 5
+            else 0.0
+        )
         trend = 1.0 if diff > 0 else -1.0 if diff < 0 else 0.0
         snapshot = TrendSnapshot(trend=trend, slope=slope)
         self._trend_cache[key] = snapshot
@@ -98,10 +102,10 @@ class AnalysisContext:
     def heatmap_bias(self) -> str:
         gauge = self.external.orderbook_heatmap
         if gauge >= 0.65:
-            return "매수벽 강함"
+            return "bid-heavy"
         if gauge <= 0.35:
-            return "매도벽 강함"
-        return "중립"
+            return "ask-heavy"
+        return "balanced"
 
 
 __all__ = ["AnalysisContext"]

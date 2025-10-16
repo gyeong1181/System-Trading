@@ -65,6 +65,7 @@ def generate_signals(
             "conditions": list(composite.conditions),
             "summary": list(composite.summary),
             "orderbook_bias": context.heatmap_bias(),
+            "close": float(prepared["close"].astype(float).iloc[-1]),
         }
         signal = Signal(
             symbol=symbol,
