@@ -106,11 +106,30 @@ def fetch_timeframes(
     return results
 
 
+def fetch_latest_price(
+    market: str,
+    *,
+    client: Optional[ccxt.binance] = None,
+) -> float:
+    """Fetch the latest traded price for the given market."""
+
+    client = client or _create_binance_client()
+    try:
+        ticker = client.fetch_ticker(market)
+    except ccxt.BaseError as exc:  # pragma: no cover - network/API failure
+        raise RuntimeError(f"Failed to fetch ticker for {market}: {exc}") from exc
+    price = ticker.get("last") or ticker.get("close")
+    if price is None:
+        raise RuntimeError(f"Ticker for {market} does not include a last price: {ticker}")
+    return float(price)
+
+
 __all__ = [
     "create_binance_client",
     "fetch_recent_ohlcv",
     "fetch_btc_eth_15m",
     "fetch_timeframes",
+    "fetch_latest_price",
 ]
 
 
