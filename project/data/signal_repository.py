@@ -24,6 +24,7 @@ class SignalRepository:
         self._path = path
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self._path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL;")
         self._conn.execute("PRAGMA synchronous=NORMAL;")
         self._create_schema()
@@ -194,6 +195,43 @@ class SignalRepository:
                 (signal_id, when.isoformat(), pnl, outcome, notes),
             )
             self._conn.execute("DELETE FROM outcome_jobs WHERE signal_id = ?;", (signal_id,))
+
+    def fetch_due_jobs(self, until: datetime) -> list[Dict[str, Any]]:
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        cursor = self._conn.execute(
+            """
+            SELECT
+                s.id AS signal_id,
+                s.created_at,
+                s.symbol,
+                s.timeframe,
+                s.direction,
+                s.entry_price,
+                s.target_price,
+                s.stop_price,
+                s.metadata,
+                o.scheduled_for
+            FROM outcome_jobs o
+            JOIN signals s ON s.id = o.signal_id
+            WHERE o.scheduled_for <= ?
+            """,
+            (until.isoformat(),),
+        )
+        rows = cursor.fetchall()
+        jobs: list[Dict[str, Any]] = []
+        for row in rows:
+            payload = dict(row)
+            metadata_raw = payload.get("metadata")
+            if isinstance(metadata_raw, str) and metadata_raw:
+                try:
+                    payload["metadata"] = json.loads(metadata_raw)
+                except json.JSONDecodeError:
+                    payload["metadata"] = {}
+            else:
+                payload["metadata"] = {}
+            jobs.append(payload)
+        return jobs
 
     def export_csv(self, path: Path, status: Optional[str] = None) -> None:
         query = "SELECT * FROM v_signals_latest"

@@ -53,8 +53,7 @@ def _rsi(series: pd.Series, period: int = 14) -> float:
     avg_gain = ups.ewm(alpha=1 / period, adjust=False).mean()
     avg_loss = downs.ewm(alpha=1 / period, adjust=False).mean()
     rs = avg_gain.iloc[-1] / max(1e-9, avg_loss.iloc[-1])
-    rsi = 100 - (100 / (1 + rs))
-    return float(np.nan_to_num(rsi, nan=50.0))
+    return float(np.nan_to_num(100 - (100 / (1 + rs)), nan=50.0))
 
 
 def _atr(df: pd.DataFrame, period: int = 14) -> float:
@@ -70,8 +69,7 @@ def _atr(df: pd.DataFrame, period: int = 14) -> float:
         ],
         axis=1,
     ).max(axis=1)
-    atr = tr.rolling(period).mean().iloc[-1]
-    return float(np.nan_to_num(atr or 0.0, nan=0.0))
+    return float(np.nan_to_num(tr.rolling(period).mean().iloc[-1] or 0.0, nan=0.0))
 
 
 def _normalise(value: float, floor: float, ceiling: float) -> float:
@@ -132,8 +130,8 @@ def _technical_category(
         mtf_bonus = (confirmations[0] / confirmations[1]) * 15
 
     orderbook_bias = context.heatmap_bias()
-    heatmap_bonus = 5.0 if orderbook_bias == "Bid heavy" and direction == "long" else 0.0
-    if orderbook_bias == "Ask heavy" and direction == "short":
+    heatmap_bonus = 5.0 if orderbook_bias == "bid-heavy" and direction == "long" else 0.0
+    if orderbook_bias == "ask-heavy" and direction == "short":
         heatmap_bonus = 5.0
 
     total = momentum_score + trend_score + rsi_score + fib_bonus + mtf_bonus + heatmap_bonus
@@ -311,7 +309,6 @@ def _session_category(df: pd.DataFrame) -> CategoryScore:
         df.index = pd.to_datetime(df.index, utc=True)
     timestamp = df.index[-1].to_pydatetime()
     hour = timestamp.hour
-    session: str
     if 12 <= hour < 18:
         session = "US"
         base_score = 0.8
@@ -439,12 +436,12 @@ def calculate_composite_score(
 
 def determine_grade(score: int) -> str:
     if score >= 88:
-        return "강력"
+        return "strong"
     if score >= 75:
-        return "우수"
+        return "high"
     if score >= 65:
-        return "기회"
-    return "관망"
+        return "opportunity"
+    return "observe"
 
 
 __all__ = ["CategoryScore", "CompositeScore", "calculate_composite_score", "determine_grade"]

@@ -1,12 +1,12 @@
-"""Command line orchestrator for the automated BTC/ETH signal system."""
+"""Command line orchestrator for the reactive BTC/ETH signal system."""
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import math
 import os
 import sys
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -17,16 +17,19 @@ if __package__ in (None, ""):
     if project_root_str not in sys.path:
         sys.path.insert(0, project_root_str)
 
-from project.alerts import TelegramNotifier, build_alert_message
+from project.alerts import TelegramNotifier
 from project.configuration import Settings, load_settings
-from project.consensus import SignalDeduplicator, mark_optimal_signals
+from project.consensus import SignalDeduplicator
 from project.data.binance_client import create_binance_client, fetch_timeframes
-from project.data.context import AnalysisContext
-from project.data.external import ExternalMetrics, load_external_metrics
-from project.data.signal_store import SignalStore
+from project.data.score_tracker import ScoreTracker
+from project.data.signal_repository import SignalRepository
+from project.events.calendar import EventCalendar
+from project.monitoring.outcome_tracker import OutcomeTracker
+from project.pipeline import ReactiveEngine
 from project.risk import RiskAdvisor
 from project.risk.controller import RiskController
-from project.signals.generator import generate_signals
+from project.risk.trade_plan import TradePlanBuilder
+from project.risk.volatility import AtrGuard
 from project.utils.timeframes import to_minutes
 
 LOGGER = logging.getLogger(__name__)
@@ -95,7 +98,7 @@ def _build_notifier(
 
 def _seconds_until_next_cycle(timeframes: list[str], now: Optional[datetime] = None) -> int:
     now = now or datetime.now(timezone.utc)
-    minutes = min(to_minutes(tf) for tf in timeframes)
+    minutes = min(int(tf[:-1]) if tf.endswith("m") else to_minutes(tf) for tf in timeframes)
     interval = max(60, minutes * 60)
     interval_delta = timedelta(seconds=interval)
     epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -106,96 +109,12 @@ def _seconds_until_next_cycle(timeframes: list[str], now: Optional[datetime] = N
     return wait_seconds
 
 
-def _run_signal_cycle(
-    *,
-    settings: Settings,
-    notifier: TelegramNotifier | LoggingNotifier,
-    deduplicator: SignalDeduplicator,
-    risk_advisor: RiskAdvisor,
-    risk_controller: RiskController,
-    signal_store: SignalStore,
-    external_metrics: ExternalMetrics,
-    client,
-) -> bool:
-    as_of = datetime.now(timezone.utc)
-    try:
-        market_data = fetch_timeframes(
-            settings.symbols,
-            settings.runtime.timeframes,
-            limit=settings.runtime.data_limit,
-            client=client,
-        )
-    except Exception as exc:  # pragma: no cover - network failure
-        LOGGER.exception("Failed to fetch market data: %s", exc)
-        return False
-
-    analysis_context = AnalysisContext(market_data, external_metrics)
-    signals = []
-    for timeframe, per_symbol in market_data.items():
-        signals.extend(
-            generate_signals(
-                per_symbol,
-                timeframe=timeframe,
-                runtime=settings.runtime,
-                as_of=as_of,
-                context=analysis_context,
-            )
-        )
-
-    if not signals:
-        LOGGER.info("No qualifying signals at %s", as_of.isoformat())
-        deduplicator.prune(as_of)
-        return False
-
-    deduplicator.apply(signals, as_of)
-    mark_optimal_signals(signals)
-
-    eligible: list = []
-    for signal in signals:
-        recommendation = risk_advisor.recommend(signal)
-        signal.metadata.setdefault("risk_recommendation", recommendation.as_dict())
-        if recommendation.risk_reward < 1.5:
-            LOGGER.debug(
-                "Discarding %s %s due to low risk/reward %.2f",
-                signal.symbol,
-                signal.timeframe,
-                recommendation.risk_reward,
-            )
-            continue
-        if not risk_controller.can_execute(recommendation):
-            LOGGER.info(
-                "Risk controller blocked %s %s due to drawdown guard.",
-                signal.symbol,
-                signal.timeframe,
-            )
-            continue
-        if not signal.is_duplicate or signal.is_optimal:
-            risk_controller.reserve(recommendation)
-        eligible.append(signal)
-
-    if not eligible:
-        LOGGER.info("Signals generated but risk filters blocked dispatch.")
-        deduplicator.prune(as_of)
-        risk_controller.persist()
-        return False
-
-    message = build_alert_message(eligible, risk_advisor)
-    if not message.strip():
-        LOGGER.debug("Generated empty alert message; nothing to dispatch.")
-        deduplicator.prune(as_of)
-        risk_controller.persist()
-        return False
-
-    notifier.send_trade_alert(message)
-    LOGGER.info(
-        "Dispatched %d signals across %d timeframes.",
-        len(eligible),
-        len(settings.runtime.timeframes),
-    )
-    signal_store.append(eligible, as_of)
-    risk_controller.persist()
-    deduplicator.prune(as_of)
-    return True
+def _locate_external_metrics(log_dir: Path) -> Optional[Path]:
+    for suffix in ("yaml", "yml", "json"):
+        candidate = log_dir / f"external_metrics.{suffix}"
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _handle_fetch(settings: Settings, limit: int) -> None:
@@ -228,6 +147,31 @@ def _handle_telegram_test(
     notifier = _build_notifier(settings, override_token=override_token, override_chat_id=override_chat_id)
     notifier.send_trade_alert(message)
     LOGGER.info("Telegram notification dispatched for test message.")
+
+
+async def _run_reactive_loop(
+    engine: ReactiveEngine,
+    *,
+    timeframes: list[str],
+    run_loop: bool,
+    loop_iterations: int,
+    sleep_seconds: int,
+) -> None:
+    iterations = 0
+    while True:
+        try:
+            await engine.run_once()
+        except Exception:  # pragma: no cover - defensive catch
+            LOGGER.exception("Unexpected error during signal cycle.")
+
+        iterations += 1
+        if not run_loop:
+            break
+        if loop_iterations and iterations >= loop_iterations:
+            break
+        wait = sleep_seconds or _seconds_until_next_cycle(timeframes)
+        LOGGER.debug("Sleeping %s seconds before next cycle...", wait)
+        await asyncio.sleep(wait)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -275,6 +219,41 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Override the sleep duration between loop iterations.",
     )
     parser.add_argument(
+        "--event-calendar",
+        type=Path,
+        help="Optional path to a macro event blackout calendar file.",
+    )
+    parser.add_argument(
+        "--delta-threshold",
+        type=float,
+        default=15.0,
+        help="Minimum score delta required to dispatch a signal.",
+    )
+    parser.add_argument(
+        "--atr-threshold",
+        type=float,
+        default=0.06,
+        help="ATR percentage threshold that blocks signals (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--score-window-minutes",
+        type=int,
+        default=30,
+        help="Rolling window (minutes) used for score delta calculations.",
+    )
+    parser.add_argument(
+        "--atr-multiplier",
+        type=float,
+        default=1.0,
+        help="ATR multiplier applied to trade plan projections (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--outcome-ttl-hours",
+        type=int,
+        default=6,
+        help="Hours after which outcome tracking jobs evaluate alerts.",
+    )
+    parser.add_argument(
         "--skip-run",
         action="store_true",
         help="Skip the signal pipeline (useful for diagnostics).",
@@ -308,41 +287,63 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     risk_advisor = RiskAdvisor(settings.risk)
     log_dir = settings.alerts.log_path.parent
-    signal_store = SignalStore(log_dir / "signals.csv")
-    risk_controller = RiskController(log_dir / "risk_state.json")
-    metrics_candidate = None
-    for suffix in ("yaml", "yml", "json"):
-        candidate = log_dir / f"external_metrics.{suffix}"
-        if candidate.exists():
-            metrics_candidate = candidate
-            break
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    score_tracker = ScoreTracker(
+        log_dir / "score_tracker.json",
+        window=timedelta(minutes=max(1, args.score_window_minutes)),
+    )
+    repository = SignalRepository(log_dir / "signals.sqlite")
+    outcome_tracker = OutcomeTracker(
+        repository,
+        ttl_hours=max(1, args.outcome_ttl_hours),
+        symbols=settings.symbols,
+    )
+    risk_controller = RiskController(
+        log_dir / "risk_state.json",
+        daily_limit=settings.risk.daily_loss_limit,
+        weekly_limit=settings.risk.weekly_loss_limit,
+    )
+    trade_plan_builder = TradePlanBuilder(atr_multiplier=args.atr_multiplier)
+    atr_guard = AtrGuard(hold_threshold=args.atr_threshold)
+    event_calendar_path = args.event_calendar or (log_dir / "event_calendar.yaml")
+    event_calendar = EventCalendar.from_file(event_calendar_path)
+    external_metrics_path = _locate_external_metrics(log_dir)
     client = create_binance_client()
 
-    iterations = 0
-    while True:
-        try:
-            external_metrics = load_external_metrics(metrics_candidate)
-            _run_signal_cycle(
-                settings=settings,
-                notifier=notifier,
-                deduplicator=deduplicator,
-                risk_advisor=risk_advisor,
-                risk_controller=risk_controller,
-                signal_store=signal_store,
-                external_metrics=external_metrics,
-                client=client,
-            )
-        except Exception:  # pragma: no cover - defensive catch
-            LOGGER.exception("Unexpected error during signal cycle.")
+    engine = ReactiveEngine(
+        symbols=settings.symbols,
+        timeframes=settings.runtime.timeframes,
+        client=client,
+        notifier=notifier,
+        runtime=settings.runtime,
+        score_tracker=score_tracker,
+        repository=repository,
+        outcome_tracker=outcome_tracker,
+        deduplicator=deduplicator,
+        risk_advisor=risk_advisor,
+        risk_controller=risk_controller,
+        atr_guard=atr_guard,
+        event_calendar=event_calendar,
+        trade_plan_builder=trade_plan_builder,
+        external_metrics_path=external_metrics_path,
+        data_limit=settings.runtime.data_limit,
+        delta_threshold=args.delta_threshold,
+        min_conditions=2,
+    )
 
-        iterations += 1
-        if not args.run_loop:
-            break
-        if args.loop_iterations and iterations >= args.loop_iterations:
-            break
-        sleep_seconds = args.sleep_seconds or _seconds_until_next_cycle(settings.runtime.timeframes)
-        LOGGER.debug("Sleeping %s seconds before next cycle...", sleep_seconds)
-        time.sleep(sleep_seconds)
+    try:
+        asyncio.run(
+            _run_reactive_loop(
+                engine,
+                timeframes=settings.runtime.timeframes,
+                run_loop=args.run_loop,
+                loop_iterations=args.loop_iterations,
+                sleep_seconds=args.sleep_seconds,
+            )
+        )
+    finally:
+        repository.close()
 
     return 0
 

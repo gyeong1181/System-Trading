@@ -36,6 +36,8 @@ class RiskConfig:
     max_leverage: float
     bet_size_pct: float
     risk_reward: float
+    daily_loss_limit: float
+    weekly_loss_limit: float
 
 
 @dataclass(frozen=True)
@@ -176,12 +178,16 @@ def load_settings(
     if bet_size_pct <= 1:
         bet_size_pct *= 100
     risk_reward = float(risk_config.get("risk_reward", 2.0))
+    daily_loss_limit = float(risk_config.get("daily_loss_limit", 2.0))
+    weekly_loss_limit = float(risk_config.get("weekly_loss_limit", 5.0))
 
     risk = RiskConfig(
         base_leverage=base_leverage,
         max_leverage=max_leverage,
         bet_size_pct=bet_size_pct,
         risk_reward=risk_reward,
+        daily_loss_limit=daily_loss_limit,
+        weekly_loss_limit=weekly_loss_limit,
     )
 
     alerts_config = yaml_config.get("alerts", {})
