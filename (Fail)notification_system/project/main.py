@@ -10,6 +10,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+import shutil
 
 if __package__ in (None, ""):
     project_root = Path(__file__).resolve().parents[1]
@@ -18,6 +19,7 @@ if __package__ in (None, ""):
         sys.path.insert(0, project_root_str)
 
 from project.alerts import TelegramNotifier
+from project.analytics.performance import PerformanceAnalyzer
 from project.configuration import Settings, load_settings
 from project.consensus import SignalDeduplicator
 from project.data.binance_client import create_binance_client, fetch_timeframes
@@ -26,6 +28,7 @@ from project.data.signal_repository import SignalRepository
 from project.events.calendar import EventCalendar
 from project.monitoring.outcome_tracker import OutcomeTracker
 from project.pipeline import ReactiveEngine
+from project.reporting.performance_scheduler import PerformanceScheduler
 from project.risk import RiskAdvisor
 from project.risk.controller import RiskController
 from project.risk.trade_plan import TradePlanBuilder
@@ -41,8 +44,11 @@ ENV_CHAT_KEYS = ("TELEGRAM_CHAT_ID", "TG_CHAT")
 class LoggingNotifier:
     """Fallback notifier that only logs the alert payload."""
 
-    def send_trade_alert(self, message: str) -> None:  # pragma: no cover - simple logging
+    def send_trade_alert(self, message: str, *, attachments: Optional[list[Path]] = None) -> None:  # pragma: no cover - simple logging
         LOGGER.info("Alert skipped (no Telegram credentials). Message:\n%s", message)
+        if attachments:
+            for item in attachments:
+                LOGGER.info("Attachment available for manual review: %s", item)
 
 
 def _summarise_settings(settings: Settings) -> str:
@@ -258,6 +264,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         action="store_true",
         help="Skip the signal pipeline (useful for diagnostics).",
     )
+    parser.add_argument(
+        "--reset-state",
+        action="store_true",
+        help="Clear cached risk and signal data before running.",
+    )
+    parser.add_argument(
+        "--analyze-performance",
+        action="store_true",
+        help="Run the performance analysis module and exit.",
+    )
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase log verbosity.")
 
     args = parser.parse_args(argv)
@@ -266,6 +282,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     _configure_logging(settings.alerts.log_path, args.verbose)
     LOGGER.info("Configuration summary: %s", _summarise_settings(settings))
 
+    log_dir = settings.alerts.log_path.parent
+    log_dir.mkdir(parents=True, exist_ok=True)
+    if args.reset_state:
+        _reset_runtime_state(log_dir=log_dir, analysis_dir=settings.analysis.report_dir)
     if args.fetch:
         _handle_fetch(settings, args.limit)
 
@@ -286,23 +306,26 @@ def main(argv: Optional[list[str]] = None) -> int:
         direction_window=timedelta(minutes=settings.runtime.direction_window_minutes),
     )
     risk_advisor = RiskAdvisor(settings.risk)
-    log_dir = settings.alerts.log_path.parent
-    log_dir.mkdir(parents=True, exist_ok=True)
 
     score_tracker = ScoreTracker(
         log_dir / "score_tracker.json",
         window=timedelta(minutes=max(1, args.score_window_minutes)),
     )
     repository = SignalRepository(log_dir / "signals.sqlite")
-    outcome_tracker = OutcomeTracker(
-        repository,
-        ttl_hours=max(1, args.outcome_ttl_hours),
-        symbols=settings.symbols,
-    )
     risk_controller = RiskController(
         log_dir / "risk_state.json",
         daily_limit=settings.risk.daily_loss_limit,
         weekly_limit=settings.risk.weekly_loss_limit,
+        reservation_ttl_hours=settings.risk.reservation_ttl_hours,
+        limits_enabled=settings.risk.limits_enabled,
+    )
+    if not settings.risk.limits_enabled:
+        LOGGER.warning("Risk drawdown limits disabled; all signals will bypass loss caps.")
+    outcome_tracker = OutcomeTracker(
+        repository,
+        ttl_hours=max(1, args.outcome_ttl_hours),
+        symbols=settings.symbols,
+        risk_controller=risk_controller,
     )
     trade_plan_builder = TradePlanBuilder(atr_multiplier=args.atr_multiplier)
     atr_guard = AtrGuard(hold_threshold=args.atr_threshold)
@@ -310,6 +333,27 @@ def main(argv: Optional[list[str]] = None) -> int:
     event_calendar = EventCalendar.from_file(event_calendar_path)
     external_metrics_path = _locate_external_metrics(log_dir)
     client = create_binance_client()
+
+    performance_analyzer = None
+    performance_scheduler = None
+    if args.analyze_performance or settings.analysis.enabled:
+        performance_analyzer = PerformanceAnalyzer(
+            database_path=repository.database_path,
+            report_dir=settings.analysis.report_dir,
+            notifier=notifier,
+            notify_summary=settings.analysis.notify_summary,
+        )
+    if settings.analysis.enabled:
+        performance_scheduler = PerformanceScheduler(
+            state_path=settings.analysis.report_dir / "analysis_state.json",
+            interval=timedelta(hours=settings.analysis.interval_hours),
+            min_new_signals=settings.analysis.min_new_signals,
+        )
+
+    if args.analyze_performance and performance_analyzer:
+        performance_analyzer.run()
+        repository.close()
+        return 0
 
     engine = ReactiveEngine(
         symbols=settings.symbols,
@@ -330,6 +374,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         data_limit=settings.runtime.data_limit,
         delta_threshold=args.delta_threshold,
         min_conditions=2,
+        performance_analyzer=performance_analyzer if settings.analysis.enabled else None,
+        performance_scheduler=performance_scheduler if settings.analysis.enabled else None,
     )
 
     try:
@@ -346,6 +392,31 @@ def main(argv: Optional[list[str]] = None) -> int:
         repository.close()
 
     return 0
+
+
+def _reset_runtime_state(*, log_dir: Path, analysis_dir: Path) -> None:
+    targets = [
+        log_dir / "risk_state.json",
+        log_dir / "score_tracker.json",
+        log_dir / "signals.sqlite",
+        log_dir / "signals.sqlite-wal",
+        log_dir / "signals.sqlite-shm",
+    ]
+    for path in targets:
+        try:
+            if path.exists():
+                path.unlink()
+                LOGGER.info("Removed %s", path)
+        except Exception as exc:  # pragma: no cover - best effort cleanup
+            LOGGER.warning("Failed to remove %s: %s", path, exc)
+
+    try:
+        if analysis_dir.exists():
+            shutil.rmtree(analysis_dir)
+            LOGGER.info("Removed analysis directory %s", analysis_dir)
+    except Exception as exc:  # pragma: no cover - best effort cleanup
+        LOGGER.warning("Failed to remove analysis directory %s: %s", analysis_dir, exc)
+
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

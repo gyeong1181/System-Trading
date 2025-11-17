@@ -49,6 +49,8 @@ class ReactiveEngine:
         data_limit: int,
         delta_threshold: float = 15.0,
         min_conditions: int = 2,
+        performance_analyzer=None,
+        performance_scheduler=None,
     ) -> None:
         self._symbols = symbols
         self._timeframes = timeframes
@@ -68,11 +70,18 @@ class ReactiveEngine:
         self._external_metrics_path = external_metrics_path
         self._delta_threshold = delta_threshold
         self._min_conditions = min_conditions
+        self._performance_analyzer = performance_analyzer
+        self._performance_scheduler = performance_scheduler
 
     async def run_once(self) -> bool:
         now = datetime.now(timezone.utc)
         self._outcome_tracker.process_due_jobs(self._client)
+        try:
+            return await self._run_cycle(now)
+        finally:
+            self._maybe_run_performance(now)
 
+    async def _run_cycle(self, now: datetime) -> bool:
         if self._event_calendar.is_blackout(now):
             LOGGER.info("Run aborted due to macro event blackout window.")
             self._repository.record(
@@ -173,8 +182,6 @@ class ReactiveEngine:
                 reasons.append("risk_controller_block")
 
             status = "sent" if not reasons else "filtered"
-            if status == "sent":
-                self._risk_controller.reserve(recommendation)
 
             record = self._repository.record(
                 status=status,
@@ -194,6 +201,7 @@ class ReactiveEngine:
             signal.metadata["signal_id"] = record.signal_id
 
             if status == "sent":
+                self._risk_controller.reserve(record.signal_id, recommendation)
                 self._outcome_tracker.schedule(record.signal_id, record.created_at)
                 approved.append(signal)
 
@@ -214,6 +222,20 @@ class ReactiveEngine:
         self._risk_controller.persist()
         self._deduplicator.prune(now)
         return True
+
+    def _maybe_run_performance(self, now: datetime) -> None:
+        if not self._performance_analyzer or not self._performance_scheduler:
+            return
+        total_signals = self._repository.count_signals()
+        if not self._performance_scheduler.should_run(total_signals=total_signals, now=now):
+            return
+        LOGGER.info("Triggering performance analysis (total signals: %d).", total_signals)
+        try:
+            self._performance_analyzer.run()
+        except Exception:  # pragma: no cover - safety net
+            LOGGER.exception("Performance analysis failed.")
+        finally:
+            self._performance_scheduler.mark_executed(total_signals=total_signals, when=now)
 
 
 # Delayed import to avoid cycle during typing

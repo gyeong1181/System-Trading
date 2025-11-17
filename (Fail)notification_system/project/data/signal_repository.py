@@ -258,5 +258,14 @@ class SignalRepository:
     def close(self) -> None:
         self._conn.close()
 
+    def count_signals(self) -> int:
+        cursor = self._conn.execute("SELECT COUNT(1) FROM signals;")
+        row = cursor.fetchone()
+        return int(row[0] if row and row[0] is not None else 0)
+
+    @property
+    def database_path(self) -> Path:
+        return self._path
+
 
 __all__ = ["SignalRepository", "RecordedSignal"]

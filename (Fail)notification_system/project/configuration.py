@@ -35,9 +35,12 @@ class RiskConfig:
     base_leverage: float
     max_leverage: float
     bet_size_pct: float
+    min_bet_pct: float
     risk_reward: float
     daily_loss_limit: float
     weekly_loss_limit: float
+    reservation_ttl_hours: float
+    limits_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,18 @@ class Settings:
     runtime: RuntimeConfig
     risk: RiskConfig
     alerts: AlertsConfig
+    analysis: "AnalysisConfig"
+
+
+@dataclass(frozen=True)
+class AnalysisConfig:
+    """Performance analysis configuration."""
+
+    enabled: bool
+    interval_hours: float
+    min_new_signals: int
+    report_dir: Path
+    notify_summary: bool
 
 
 def _read_env_file(path: Path) -> Dict[str, str]:
@@ -175,19 +190,28 @@ def load_settings(
     base_leverage = float(risk_config.get("base_leverage", yaml_config.get("leverage", 3)))
     max_leverage = float(risk_config.get("max_leverage", max(5, base_leverage)))
     bet_size_pct = float(risk_config.get("bet_size_pct", yaml_config.get("risk_per_trade", 0.05)))
-    if bet_size_pct <= 1:
+    if bet_size_pct <= 0.05:
         bet_size_pct *= 100
+    min_bet_pct = float(risk_config.get("min_bet_pct", max(0.25, bet_size_pct * 0.25)))
+    if min_bet_pct <= 0.05:
+        min_bet_pct *= 100
+    min_bet_pct = min(min_bet_pct, bet_size_pct)
     risk_reward = float(risk_config.get("risk_reward", 2.0))
     daily_loss_limit = float(risk_config.get("daily_loss_limit", 2.0))
     weekly_loss_limit = float(risk_config.get("weekly_loss_limit", 5.0))
+    reservation_ttl_hours = float(risk_config.get("reservation_ttl_hours", 2.0))
+    limits_enabled = _get_bool(risk_config, "limits_enabled", True)
 
     risk = RiskConfig(
         base_leverage=base_leverage,
         max_leverage=max_leverage,
         bet_size_pct=bet_size_pct,
+        min_bet_pct=min_bet_pct,
         risk_reward=risk_reward,
         daily_loss_limit=daily_loss_limit,
         weekly_loss_limit=weekly_loss_limit,
+        reservation_ttl_hours=reservation_ttl_hours,
+        limits_enabled=limits_enabled,
     )
 
     alerts_config = yaml_config.get("alerts", {})
@@ -204,15 +228,27 @@ def load_settings(
         log_path=log_path,
     )
 
+    analysis_section = yaml_config.get("analysis", {})
+    report_dir = Path(analysis_section.get("report_dir", log_dir / "reports"))
+    report_dir.mkdir(parents=True, exist_ok=True)
+    analysis = AnalysisConfig(
+        enabled=_get_bool(analysis_section, "enabled", False),
+        interval_hours=float(analysis_section.get("interval_hours", 6.0)),
+        min_new_signals=int(analysis_section.get("min_new_signals", 50)),
+        report_dir=report_dir,
+        notify_summary=_get_bool(analysis_section, "notify_summary", True),
+    )
+
     symbols = _resolve_symbols(yaml_config)
 
-    return Settings(symbols=symbols, runtime=runtime, risk=risk, alerts=alerts)
+    return Settings(symbols=symbols, runtime=runtime, risk=risk, alerts=alerts, analysis=analysis)
 
 
 __all__ = [
     "RuntimeConfig",
     "RiskConfig",
     "AlertsConfig",
+    "AnalysisConfig",
     "Settings",
     "load_settings",
 ]

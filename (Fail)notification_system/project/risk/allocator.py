@@ -52,17 +52,16 @@ class RiskAdvisor:
             base_leverage * leverage_multiplier * max(0.6, volatility_penalty * 1.1),
         )
 
-        bet_multiplier = {
-            "strong": 1.25,
-            "high": 1.05,
-            "opportunity": 0.8,
-            "observe": 0.6,
-        }.get(grade, 0.6)
-        base_bet = self._config.bet_size_pct
-        if base_bet <= 1:
-            base_bet *= 100
-        bet_pct = max(0.5, base_bet * bet_multiplier * volatility_penalty)
-        bet_pct = min(self._config.bet_size_pct, bet_pct)
+        confidence_weight = {
+            "strong": 1.0,
+            "high": 0.75,
+            "opportunity": 0.5,
+            "observe": 0.3,
+        }.get(grade, 0.3)
+        max_bet = self._config.bet_size_pct
+        min_bet = self._config.min_bet_pct
+        target_bet = min_bet + (max_bet - min_bet) * confidence_weight
+        bet_pct = round(max(min_bet, min(max_bet, target_bet * volatility_penalty)), 2)
 
         risk_reward = float(signal.metadata.get("risk_reward", self._config.risk_reward))
         if signal.direction.lower() == "short":
