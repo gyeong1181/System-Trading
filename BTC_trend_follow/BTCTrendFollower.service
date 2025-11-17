@@ -1,0 +1,18 @@
+[Unit]
+Description=BTC 추세추종 (AuraBot v1.6.1 Python Trader)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/aurabot
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=/opt/aurabot/.env
+ExecStart=/usr/bin/python3 btc_trend_follow.py --live
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
