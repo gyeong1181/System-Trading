@@ -7,6 +7,7 @@ from typing import Optional
 
 from project.data.binance_client import fetch_latest_price
 from project.data.signal_repository import SignalRepository
+from project.risk.controller import RiskController
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,10 +21,12 @@ class OutcomeTracker:
         *,
         ttl_hours: int = 6,
         symbols: dict[str, str],
+        risk_controller: Optional[RiskController] = None,
     ) -> None:
         self._repository = repository
         self._ttl = timedelta(hours=ttl_hours)
         self._symbols = {alias.upper(): market for alias, market in symbols.items()}
+        self._risk_controller = risk_controller
 
     def schedule(self, signal_id: str, created_at: datetime) -> None:
         when = created_at + self._ttl
@@ -85,6 +88,11 @@ class OutcomeTracker:
             notes=notes,
             resolved_at=now,
         )
+        if self._risk_controller:
+            try:
+                self._risk_controller.release(signal_id, pnl)
+            except Exception:  # pragma: no cover - guard against risk persistence failure
+                LOGGER.exception("Failed to release risk reservation for %s", signal_id)
 
     @staticmethod
     def _coerce_float(value) -> Optional[float]:
