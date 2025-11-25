@@ -1,3 +1,8 @@
+"""
+BTC 추세추종 전략 - 원본 메인 파일
+- systemd 서비스에서 직접 실행할 때 사용
+- Docker 사용 시에는 main.py를 사용 (Telegram/S3/CloudWatch 통합)
+"""
 from __future__ import annotations
 
 import argparse
