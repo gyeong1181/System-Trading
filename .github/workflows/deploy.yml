@@ -1,0 +1,41 @@
+name: deploy-btc-trend-follow
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create package
+        run: |
+          zip -r BTCTrendFollower_package.zip BTC_trend_follow
+
+      - name: Copy package to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "BTCTrendFollower_package.zip"
+          target: "/tmp"
+
+      - name: Deploy on EC2 (unzip + restart systemd)
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            sudo mkdir -p /opt/btc_trend_follow
+            sudo chown ec2-user:ec2-user /opt/btc_trend_follow
+            unzip -o /tmp/BTCTrendFollower_package.zip -d /opt
+            sudo systemctl daemon-reload
+            sudo systemctl restart BTCTrendFollower
+            sudo systemctl status BTCTrendFollower --no-pager
