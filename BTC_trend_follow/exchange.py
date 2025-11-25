@@ -82,12 +82,14 @@ class PaperExchangeClient(ExchangeClient):
         starting_equity: float = 10000.0,
         fee_rate: float = 0.0005,
         reporter: Optional[TradeReporter] = None,
+        notifier=None,
     ):
         self._equity = starting_equity
         self.fee_rate = fee_rate
         self._position: Optional[Position] = None
         self.logger = get_logger("PaperExchange")
         self.reporter = reporter
+        self.notifier = notifier
         self.mode_name = "PAPER"
 
     async def fetch_equity(self) -> float:
@@ -132,6 +134,8 @@ class PaperExchangeClient(ExchangeClient):
         )
         if self.reporter:
             self.reporter.log_entry(self.mode_name, side, qty, entry_price)
+        if self.notifier:
+            self.notifier.notify_entry(symbol, side, qty, entry_price, self.mode_name)
         return self._position
 
     async def close_position(self, symbol: str, qty: Optional[float], price: float, reason: str) -> None:
@@ -168,6 +172,8 @@ class PaperExchangeClient(ExchangeClient):
                 pnl=pnl,
                 equity=self._equity,
             )
+        if self.notifier:
+            self.notifier.notify_exit(symbol, position.side, qty_to_close, price, pnl, reason, self.mode_name)
         if position.qty <= 1e-8:
             self._position = None
 
@@ -181,12 +187,14 @@ class BinanceLiveExchange(ExchangeClient):
         api_secret: str,
         reporter: Optional[TradeReporter] = None,
         fee_rate: float = 0.0005,
+        notifier=None,
     ):
         if httpx is None:
             raise RuntimeError("httpx is required for live trading")
         self.api_key = api_key
         self.api_secret = api_secret.encode()
         self.reporter = reporter
+        self.notifier = notifier
         self.logger = get_logger("BinanceLive")
         self._position: Optional[Position] = None
         self.fee_rate = fee_rate
@@ -236,6 +244,8 @@ class BinanceLiveExchange(ExchangeClient):
         )
         if self.reporter:
             self.reporter.log_entry(self.mode_name, side, qty, entry_price)
+        if self.notifier:
+            self.notifier.notify_entry(symbol, side, qty, entry_price, self.mode_name)
         return self._position
 
     async def close_position(self, symbol: str, qty: Optional[float], price: float, reason: str) -> None:
@@ -271,6 +281,8 @@ class BinanceLiveExchange(ExchangeClient):
                 pnl=pnl,
                 equity=self._equity_cache,
             )
+        if self.notifier:
+            self.notifier.notify_exit(symbol, position.side, qty_to_close, price, pnl, reason, self.mode_name)
         if position.qty <= 1e-8:
             self._position = None
 
