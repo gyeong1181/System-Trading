@@ -5,10 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/aurabot
+WorkingDirectory=/opt/btc_trend_follow
 Environment="PYTHONUNBUFFERED=1"
-EnvironmentFile=/opt/aurabot/.env
-ExecStart=/usr/bin/python3 btc_trend_follow.py --live
+EnvironmentFile=/opt/btc_trend_follow/.env
+ExecStart=/opt/btc_trend_follow/.venv/bin/python3 btc_trend_follow.py --live --paper
 Restart=always
 RestartSec=5
 StandardOutput=journal
