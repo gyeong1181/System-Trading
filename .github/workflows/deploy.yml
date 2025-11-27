@@ -35,7 +35,7 @@ jobs:
             set -e
             sudo mkdir -p /opt/btc_trend_follow
             sudo chown ec2-user:ec2-user /opt/btc_trend_follow
-            unzip -o /tmp/BTCTrendFollower_package.zip -d /opt
+            unzip -o /tmp/BTCTrendFollower_package.zip -d /opt/btc_trend_follow
             sudo systemctl daemon-reload
             sudo systemctl restart BTCTrendFollower
             sudo systemctl status BTCTrendFollower --no-pager
