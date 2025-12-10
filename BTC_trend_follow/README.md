@@ -1,9 +1,11 @@
 # BTC 추세추종 – AuraBot v1.6.1 Python 포팅
 
-대표님의 PineScript 전략을 Python 서비스로 옮겼습니다. EMA20/50, ADX>15, ATR 기반 리스크, Minervini 분할청산, EMA 2봉 플립 강제 종료까지 그대로 구현했고 4시간봉 기본 세팅입니다.
+대표님의 PineScript 전략을 Python 서비스로 옮겼습니다. EMA20/50, ADX>15, ATR 기반 리스크, Minervini 2단계 분할 청산, EMA 2봉 플립 강제 종료까지 동일하게 동작하며 4시간봉 기본 세팅입니다.
+
+## Architecture
+![Architecture](Architecture/Architecture.png)
 
 ## 구성
-
 - `btc_trend_follow.py` – 메인 실행/CLI (`--paper`, `--real`, `--live`, `--leverage`)
 - `exchange.py` – Binance REST/WS, `PaperExchangeClient`, `BinanceLiveExchange`
 - `risk.py`, `indicators.py`, `utils.py` – 리스크·지표·로깅
@@ -13,8 +15,7 @@
 - `BTCTrendFollower_package.zip` – AWS 업로드 ZIP
 
 ## 환경
-
-1. 루트 `.env` 또는 `/opt/btc_trend_follow/.env`에 API/텔레그램 키 작성  
+1. `.env`를 `/opt/btc_trend_follow/.env`에 준비  
    - 실계정 사용 시 `BINANCE_API_KEY`, `BINANCE_API_SECRET`  
    - 옵션: `BTC_TREND_SYMBOL`, `BTC_TREND_INTERVAL`, `BTC_TREND_RISK_PCT`, `BTC_TREND_LEVERAGE`, `BTC_TREND_PAPER_MODE`
 2. 의존성:
@@ -23,8 +24,7 @@
    ```
 
 ## 실행
-
-### 페이퍼 / 백테스트
+### 페이퍼 / 백테스트 (REST 부트스트랩)
 ```bash
 python btc_trend_follow.py --paper --interval 4h --paper-bars 400
 ```
@@ -51,12 +51,10 @@ sudo systemctl status BTCTrendFollower
 ```
 
 ## 리포트/로그
-
 - 실시간 실행 이벤트는 `logs/btc_trend_follow.log`에 기록
 - 모든 진입/청산/에쿼티 스냅샷이 `reports/trade_log.csv`, `reports/equity_curve.csv`에 저장되어 엑셀에서 바로 열 수 있음
 
 ## 포트폴리오 포인트
-
 - Paper/LIVE 토글(`--paper`/`--real`, `BTC_TREND_PAPER_MODE`)
-- systemd + AWS 체크리스트 + GitHub Actions 핸드오버 문서
+- systemd + AWS 체크리스트 + GitHub Actions 문서
 - 실적 데이터(CSV) 자동 축적 → 클라우드/운용 역량 어필 가능
