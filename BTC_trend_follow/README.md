@@ -4,6 +4,7 @@
 
 ## Architecture
 ![Architecture](Architecture/Architecture.png)
+![GitHub Actions CI/CD](Architecture/Github Actions CICD.png)
 
 ## 구성
 - `btc_trend_follow.py` – 메인 실행/CLI (`--paper`, `--real`, `--live`, `--leverage`)
