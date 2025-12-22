@@ -1,0 +1,16 @@
+# BTC 추세추종 전략 필수 의존성
+pandas>=2.0.0
+numpy>=1.24.0
+httpx>=0.24.0
+websockets>=11.0
+python-dotenv>=1.0.0
+
+# AWS 서비스 연동
+boto3>=1.28.0
+botocore>=1.31.0
+
+# Telegram 알림
+requests>=2.31.0
+
+
+
