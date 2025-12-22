@@ -1,0 +1,38 @@
+# .env 파일 템플릿
+# 이 파일을 복사해서 .env 파일을 만드세요
+# Windows: copy env_template.txt .env
+# Linux/Mac: cp env_template.txt .env
+
+# Binance API 설정 (실거래용)
+# Binance Futures에서 API 키를 생성하고 여기에 입력하세요
+# 주의: 실제 키는 절대 Git에 커밋하지 마세요!
+BINANCE_API_KEY=your_binance_api_key_here
+BINANCE_API_SECRET=your_binance_api_secret_here
+
+# 전략 설정 (선택사항 - 기본값 사용 가능)
+BTC_TREND_SYMBOL=BTCUSDT
+BTC_TREND_INTERVAL=4h
+BTC_TREND_RISK_PCT=1.0
+BTC_TREND_LEVERAGE=1.0
+BTC_TREND_USE_SHORT=false
+
+# 페이퍼/실거래 모드 전환
+# true = 페이퍼 모드 (가짜 돈으로 테스트)
+# false = 실거래 모드 (실제 돈으로 거래)
+BTC_TREND_PAPER_MODE=true
+
+# Telegram 알림 (선택사항 - 추후 구현)
+# TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+# TELEGRAM_CHAT_ID=your_telegram_chat_id
+
+
+
+# PSAR + EMA200 + RSI(50) 전략 (선택 입력 - 공통 env와 다를 때만 수정)
+PSAR_RSI_SYMBOL=BTCUSDT
+PSAR_RSI_INTERVAL=1h
+PSAR_RSI_RISK_PCT=1.0
+PSAR_RSI_RR=2.0
+PSAR_RSI_SWING_LOOKBACK=5
+PSAR_RSI_LEVERAGE=1.0
+PSAR_RSI_PAPER_MODE=true
+PSAR_RSI_EXIT_ON_FLIP=true
