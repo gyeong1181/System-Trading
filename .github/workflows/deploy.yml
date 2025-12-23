@@ -1,41 +1,40 @@
-name: deploy-btc-trend-follow
+name: Deploy to EC2
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [main]
 
 jobs:
   deploy:
+    # GitHub Actions는 리눅스 런너(ubuntu)에서 실행됩니다.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create package
+      - name: Setup SSH key
         run: |
-          zip -r BTCTrendFollower_package.zip BTC_trend_follow
+          mkdir -p ~/.ssh
+          echo "$EC2_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
 
-      - name: Copy package to EC2
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "BTCTrendFollower_package.zip"
-          target: "/tmp"
+      - name: Rsync to EC2
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            -e "ssh -i ~/.ssh/id_rsa" \
+            ./ "${EC2_USER}@${EC2_HOST}:/opt/psar_rsi_bot"
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
 
-      - name: Deploy on EC2 (unzip + restart systemd)
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -e
-            sudo mkdir -p /opt/btc_trend_follow
-            sudo chown ec2-user:ec2-user /opt/btc_trend_follow
-            unzip -o /tmp/BTCTrendFollower_package.zip -d /opt/btc_trend_follow
-            sudo systemctl daemon-reload
-            sudo systemctl restart BTCTrendFollower
-            sudo systemctl status BTCTrendFollower --no-pager
+      - name: Restart service
+        run: |
+          ssh -i ~/.ssh/id_rsa "${EC2_USER}@${EC2_HOST}" "sudo systemctl daemon-reload && sudo systemctl restart psar_rsi_bot"
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
