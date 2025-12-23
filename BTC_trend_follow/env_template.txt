@@ -1,15 +1,15 @@
-# .env 파일 템플릿
-# 이 파일을 복사해서 .env 파일을 만드세요
+# .env 템플릿 샘플
+# 아래 샘플을 복사해서 .env 파일을 만드세요
 # Windows: copy env_template.txt .env
 # Linux/Mac: cp env_template.txt .env
 
 # Binance API 설정 (실거래용)
-# Binance Futures에서 API 키를 생성하고 여기에 입력하세요
-# 주의: 실제 키는 절대 Git에 커밋하지 마세요!
+# Binance Futures에서 API 키를 발급하고 레버리지/권한을 확인하세요
+# 주의: 실거래 키는 절대 Git에 올리지 마세요
 BINANCE_API_KEY=your_binance_api_key_here
 BINANCE_API_SECRET=your_binance_api_secret_here
 
-# 전략 설정 (선택사항 - 기본값 사용 가능)
+# 전략 설정 (선택사항 - 기본값을 사용해도 됨)
 BTC_TREND_SYMBOL=BTCUSDT
 BTC_TREND_INTERVAL=4h
 BTC_TREND_RISK_PCT=1.0
@@ -17,13 +17,10 @@ BTC_TREND_LEVERAGE=1.0
 BTC_TREND_USE_SHORT=false
 
 # 페이퍼/실거래 모드 전환
-# true = 페이퍼 모드 (가짜 돈으로 테스트)
-# false = 실거래 모드 (실제 돈으로 거래)
+# true = 페이퍼모드 (가상돈)
+# false = 실거래 (실제 거래)
 BTC_TREND_PAPER_MODE=true
 
-# Telegram 알림 (선택사항 - 추후 구현)
+# Telegram 알림 (선택사항 - 추후 구현용)
 # TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 # TELEGRAM_CHAT_ID=your_telegram_chat_id
-
-
-
