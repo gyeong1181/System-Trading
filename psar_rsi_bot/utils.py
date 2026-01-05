@@ -49,7 +49,7 @@ def get_logger(name: str = "BTCTrendFollower", level: int = logging.INFO, log_to
     logger.addHandler(stream_handler)
 
     if log_to_file:
-        log_file = LOG_DIR / "btc_trend_follow.log"
+        log_file = LOG_DIR / "psar_rsi_bot.log"
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
