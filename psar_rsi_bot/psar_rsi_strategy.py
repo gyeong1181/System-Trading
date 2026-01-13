@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
+import os
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional
 
@@ -17,6 +20,24 @@ from exchange import (
 from indicators import compute_psar_rsi_ema
 from reports import TradeReporter
 from utils import Candle, get_logger, load_env
+
+
+def log_trade_signal(signal_type, symbol, price, psar, rsi, balance=0):
+    """CSV analysis log with console output."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"{signal_type} {symbol} @ {price:.2f} PSAR:{psar:.4f} RSI:{rsi:.1f}")
+    csv_row = [timestamp, symbol, signal_type, price, psar, rsi, balance]
+    with open("trade_signals.csv", "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(csv_row)
+
+
+def init_trade_log():
+    """Initialize CSV header once."""
+    if not os.path.exists("trade_signals.csv"):
+        with open("trade_signals.csv", "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["timestamp", "symbol", "signal", "price", "psar", "rsi", "balance"])
 
 
 @dataclass
@@ -122,6 +143,8 @@ class PsarRsiTrader:
             return
 
         entry = float(latest["close"])
+        psar_value = float(latest.get("psar", 0.0))
+        rsi_value = float(latest.get("rsi", 0.0))
         risk_per_unit = abs(entry - swing_stop)
         if risk_per_unit <= 0:
             return
@@ -150,6 +173,8 @@ class PsarRsiTrader:
             trail_offset=trail_offset,
             entry_price=entry,
         )
+        signal_type = "BUY" if side == "long" else "SELL"
+        log_trade_signal(signal_type, self.config.symbol, entry, psar_value, rsi_value, balance=equity)
         self.logger.info(
             "Enter %s | entry=%.4f stop=%.4f target=%.4f risk=%.4f qty=%.6f",
             side,
@@ -261,6 +286,7 @@ def parse_args():
 
 
 async def main():
+    init_trade_log()
     args = parse_args()
     env = load_env()
 
