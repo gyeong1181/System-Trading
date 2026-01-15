@@ -4,11 +4,13 @@ import argparse
 import asyncio
 import csv
 import os
+import time
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
+import websocket
 
 from exchange import (
     BinanceCandleStream,
@@ -20,6 +22,29 @@ from exchange import (
 from indicators import compute_psar_rsi_ema
 from reports import TradeReporter
 from utils import Candle, get_logger, load_env
+
+
+class BinanceWebSocket:
+    def __init__(self, symbol):
+        self.symbol = symbol
+        self.ws = None
+        self.reconnect_interval = 60
+
+    def on_message(self, ws, message):
+        # Candle data processing hook
+        pass
+
+    def connect(self):
+        while True:
+            try:
+                self.ws = websocket.WebSocketApp(
+                    f"wss://stream.binance.com:9443/ws/{self.symbol.lower()}@kline_1m",
+                    on_message=self.on_message,
+                )
+                self.ws.run_forever(ping_interval=60, ping_timeout=10)
+            except Exception as exc:
+                print(f"WebSocket error: {exc}. Reconnecting in 60s...")
+                time.sleep(self.reconnect_interval)
 
 
 def log_trade_signal(signal_type, symbol, price, psar, rsi, balance=0):
