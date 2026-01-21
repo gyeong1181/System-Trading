@@ -31,8 +31,28 @@ class BinanceWebSocket:
         self.reconnect_interval = 60
 
     def on_message(self, ws, message):
-        # Candle data processing hook
-        pass
+        """Websocket kline processing with verbose logging."""
+        try:
+            import json
+            msg = json.loads(message)
+            print(f"MSG {msg.get('e', 'unknown')}: {msg.get('s', 'N/A')}")
+
+            if msg.get("e") == "kline" and msg["k"]["s"] == "BTCUSDT":
+                kline = msg["k"]
+                timestamp = kline["t"] // 1000
+                close_price = float(kline["c"])
+                is_closed = kline["x"]
+
+                print(f"KLINE 1h close: {close_price:.2f}, closed: {is_closed}, t: {timestamp}")
+
+                if is_closed:
+                    print("Signal check start...")
+                    # TODO: connect existing signal logic here
+        except json.JSONDecodeError as exc:
+            print(f"JSON error: {exc}")
+            print(f"Raw: {message[:100]}...")
+        except Exception as exc:
+            print(f"on_message exception: {exc}")
 
     def connect(self):
         while True:
