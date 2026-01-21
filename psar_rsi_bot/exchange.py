@@ -329,10 +329,28 @@ class BinanceCandleStream:
                     async for message in ws:
                         if self._stop_event.is_set():
                             break
+                        self.logger.info("Stream message received: %s...", message[:100])
                         payload = json.loads(message)
+                        self.logger.info("Message type: %s", payload.get("e", "unknown"))
+                        if payload.get("e") == "kline":
+                            kline = payload.get("k", {})
+                            self.logger.info(
+                                "KLINE %s %s: close=%s closed=%s t=%s",
+                                kline.get("s"),
+                                kline.get("i"),
+                                kline.get("c"),
+                                kline.get("x"),
+                                kline.get("t"),
+                            )
                         candle = Candle.from_binance_ws(payload)
+                        self.logger.info(
+                            "Invoking handler for candle at %s closed=%s",
+                            candle.timestamp,
+                            candle.closed,
+                        )
                         if candle.closed:
                             await handler(candle)
+                            self.logger.info("Handler completed")
             except Exception as exc:
                 self.logger.warning("Stream error %s. Reconnecting...", exc)
                 await asyncio.sleep(3)
