@@ -58,7 +58,7 @@ class BinanceWebSocket:
         while True:
             try:
                 self.ws = websocket.WebSocketApp(
-                    f"wss://stream.binance.com:9443/ws/{self.symbol.lower()}@kline_1m",
+                    f"wss://stream.binance.com:9443/ws/{self.symbol.lower()}@kline_1h",
                     on_message=self.on_message,
                 )
                 self.ws.run_forever(ping_interval=60, ping_timeout=10)
