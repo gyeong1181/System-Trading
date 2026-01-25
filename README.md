@@ -15,12 +15,23 @@
 운영 중 발생한 이슈를 로그/알림으로 추적하고, 배포 내역을 CI/CD로 관리합니다.
 
 ### CloudWatch Logs Insights
-![CloudWatch Logs Insights](psar_rsi_bot/docs/cloudwatch_insights.png)
+![CloudWatch Logs Insights](psar_rsi_bot/docs/cloudwatch_insights2.png)
 
 ### GitHub Actions 배포 로그
 ![GitHub Actions](psar_rsi_bot/docs/Github_Actions_CICD_capture.png)
 
+### Telegram 알림
+![Telegram Alert](psar_rsi_bot/docs/telegram_alert.png)
+
 > 텔레그램 알림은 거래/에러 상황을 즉시 전달하도록 구성되어 있으며, 운영 중 장애 대응 기록에 활용합니다.
+
+CloudWatch Logs Insights를 활용해
+실행/에러/경고 로그를 시간 범위 기준으로 필터링하며,
+실제 운영 중 발생한 Binance API 400 오류 및 스트림 오류를 추적했습니다.
+
+장애 발생 시 로그 기반으로 원인을 좁히고,
+알림(텔레그램)과 연계해 빠르게 인지할 수 있도록 구성했습니다.
+현재 시스템이 아직 완전하지 않아, **최선의 쿼리 캡처와 텔레그램 알림 캡처**를 정리해 두었습니다.
 
 ---
 
