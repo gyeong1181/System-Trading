@@ -54,5 +54,6 @@ sudo systemctl status psar_rsi_bot --no-pager
 ## 아키텍처/운영 증빙
 ![Architecture](docs/Architecture/Architecture.png)
 ![Mermaid Architecture](docs/Architecture/Mermaid_Architecture.png)
-![CloudWatch Logs Insights](docs/cloudwatch_insights.png)
+![CloudWatch Logs Insights](docs/cloudwatch_insights2.png)
 ![GitHub Actions](docs/Github_Actions_CICD_capture.png)
+![Telegram Alert](docs/telegram_alert.png)
