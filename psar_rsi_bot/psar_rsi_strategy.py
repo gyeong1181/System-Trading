@@ -5,6 +5,8 @@ import asyncio
 import csv
 import os
 import time
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional
@@ -85,6 +87,20 @@ def init_trade_log():
             writer.writerow(["timestamp", "symbol", "signal", "price", "psar", "rsi", "balance"])
 
 
+def send_telegram_message(env: dict, message: str) -> None:
+    token = env.get("TELEGRAM_BOT_TOKEN")
+    chat_id = env.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        data = urllib.parse.urlencode({"chat_id": chat_id, "text": message}).encode("utf-8")
+        with urllib.request.urlopen(url, data=data, timeout=10) as _:
+            pass
+    except Exception as exc:
+        print(f"Telegram notify error: {exc}")
+
+
 @dataclass
 class PsarRsiConfig:
     symbol: str = "BTCUSDT"
@@ -155,6 +171,24 @@ class PsarRsiTrader:
         )
         latest = self.indicator_df.iloc[-1]
         prev = self.indicator_df.iloc[-2]
+        price = float(latest["close"])
+        psar_value = float(latest.get("psar", 0.0))
+        rsi_value = float(latest.get("rsi", 0.0))
+        self.logger.info(
+            "Internal | Price: %.2f | PSAR: %.4f | RSI: %.1f",
+            price,
+            psar_value,
+            rsi_value,
+        )
+        rsi_near = rsi_value <= 32 or rsi_value >= 68
+        psar_near = price > 0 and abs(price - psar_value) / price <= 0.002
+        if rsi_near or psar_near:
+            self.logger.info(
+                "Signal soon? RSI=%.1f PSAR=%.4f price=%.2f",
+                rsi_value,
+                psar_value,
+                price,
+            )
 
         position = self.exchange.position
         if position is not None:
@@ -334,6 +368,7 @@ async def main():
     init_trade_log()
     args = parse_args()
     env = load_env()
+    send_telegram_message(env, "PSAR RSI bot started")
 
     symbol = args.symbol or env.get("PSAR_RSI_SYMBOL") or env.get("BTC_TREND_SYMBOL") or "BTCUSDT"
     interval = args.interval or env.get("PSAR_RSI_INTERVAL") or "1h"

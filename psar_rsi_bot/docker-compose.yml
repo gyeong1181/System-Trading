@@ -1,0 +1,14 @@
+﻿version: "3.9"
+
+services:
+  psar_rsi_bot:
+    build: .
+    container_name: psar_rsi_bot
+    env_file:
+      - .env
+    command: ["python", "psar_rsi_strategy.py", "--live", "--paper", "--symbol", "BTCUSDT", "--interval", "1h"]
+    volumes:
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+      - ./trade_signals.csv:/app/trade_signals.csv
+    restart: unless-stopped
