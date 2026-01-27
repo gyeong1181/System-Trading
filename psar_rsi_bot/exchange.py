@@ -55,6 +55,9 @@ class ExchangeClient:
     async def fetch_equity(self) -> float:
         raise NotImplementedError
 
+    async def fetch_available_balance(self) -> float:
+        raise NotImplementedError
+
     async def enter_position(
         self,
         symbol: str,
@@ -69,6 +72,9 @@ class ExchangeClient:
         raise NotImplementedError
 
     async def close_position(self, symbol: str, qty: Optional[float], price: float, reason: str) -> None:
+        raise NotImplementedError
+
+    def get_position(self, symbol: str) -> Optional[Position]:
         raise NotImplementedError
 
     @property
@@ -86,7 +92,7 @@ class PaperExchangeClient(ExchangeClient):
     ):
         self._equity = starting_equity
         self.fee_rate = fee_rate
-        self._position: Optional[Position] = None
+        self._positions: Dict[str, Position] = {}
         self.logger = get_logger("PaperExchange")
         self.reporter = reporter
         self.notifier = notifier
@@ -95,9 +101,17 @@ class PaperExchangeClient(ExchangeClient):
     async def fetch_equity(self) -> float:
         return self._equity
 
+    async def fetch_available_balance(self) -> float:
+        return self._equity
+
     @property
     def position(self) -> Optional[Position]:
-        return self._position
+        if self._positions:
+            return next(iter(self._positions.values()))
+        return None
+
+    def get_position(self, symbol: str) -> Optional[Position]:
+        return self._positions.get(symbol.upper())
 
     async def enter_position(
         self,
@@ -110,7 +124,7 @@ class PaperExchangeClient(ExchangeClient):
         trail_offset: float,
         entry_price: float,
     ) -> Position:
-        if self._position is not None:
+        if self._positions.get(symbol.upper()) is not None:
             raise RuntimeError("Position already open")
         self.logger.info(
             "[PAPER] Enter %s %s qty=%.6f entry=%.2f stop=%.2f tp1=%.2f runner=%.2f",
@@ -122,7 +136,7 @@ class PaperExchangeClient(ExchangeClient):
             tp1_price,
             runner_price,
         )
-        self._position = Position(
+        position = Position(
             side=side,
             qty=qty,
             entry_price=entry_price,
@@ -132,14 +146,15 @@ class PaperExchangeClient(ExchangeClient):
             trail_offset=trail_offset,
             initial_qty=qty,
         )
+        self._positions[symbol.upper()] = position
         if self.reporter:
             self.reporter.log_entry(self.mode_name, side, qty, entry_price)
         if self.notifier:
             self.notifier.notify_entry(symbol, side, qty, entry_price, self.mode_name)
-        return self._position
+        return position
 
     async def close_position(self, symbol: str, qty: Optional[float], price: float, reason: str) -> None:
-        position = self._position
+        position = self._positions.get(symbol.upper())
         if position is None:
             return
         qty_to_close = qty if qty is not None else position.qty
@@ -175,7 +190,7 @@ class PaperExchangeClient(ExchangeClient):
         if self.notifier:
             self.notifier.notify_exit(symbol, position.side, qty_to_close, price, pnl, reason, self.mode_name)
         if position.qty <= 1e-8:
-            self._position = None
+            self._positions.pop(symbol.upper(), None)
 
 
 class BinanceLiveExchange(ExchangeClient):
@@ -196,7 +211,7 @@ class BinanceLiveExchange(ExchangeClient):
         self.reporter = reporter
         self.notifier = notifier
         self.logger = get_logger("BinanceLive")
-        self._position: Optional[Position] = None
+        self._positions: Dict[str, Position] = {}
         self.fee_rate = fee_rate
         self._session = httpx.AsyncClient(base_url=self.BASE_URL, timeout=15)
         self.mode_name = "LIVE"
@@ -215,9 +230,22 @@ class BinanceLiveExchange(ExchangeClient):
             self.reporter.log_equity(self.mode_name, self._equity_cache)
         return self._equity_cache
 
+    async def fetch_available_balance(self) -> float:
+        params: Dict[str, str] = {}
+        data = await self._signed_request("GET", "/fapi/v2/balance", params)
+        usdt = next((item for item in data if item.get("asset") == "USDT"), None)
+        if usdt:
+            return float(usdt.get("availableBalance", usdt.get("balance", 0.0)))
+        return 0.0
+
     @property
     def position(self) -> Optional[Position]:
-        return self._position
+        if self._positions:
+            return next(iter(self._positions.values()))
+        return None
+
+    def get_position(self, symbol: str) -> Optional[Position]:
+        return self._positions.get(symbol.upper())
 
     async def enter_position(
         self,
@@ -232,7 +260,7 @@ class BinanceLiveExchange(ExchangeClient):
     ) -> Position:
         await self._place_market_order(symbol, "BUY" if side == "long" else "SELL", qty, reduce_only=False)
         self.logger.info("[LIVE] Entered %s %s qty=%.6f price=%.2f", symbol, side.upper(), qty, entry_price)
-        self._position = Position(
+        position = Position(
             side=side,
             qty=qty,
             entry_price=entry_price,
@@ -242,14 +270,15 @@ class BinanceLiveExchange(ExchangeClient):
             trail_offset=trail_offset,
             initial_qty=qty,
         )
+        self._positions[symbol.upper()] = position
         if self.reporter:
             self.reporter.log_entry(self.mode_name, side, qty, entry_price)
         if self.notifier:
             self.notifier.notify_entry(symbol, side, qty, entry_price, self.mode_name)
-        return self._position
+        return position
 
     async def close_position(self, symbol: str, qty: Optional[float], price: float, reason: str) -> None:
-        position = self._position
+        position = self._positions.get(symbol.upper())
         if position is None:
             return
         qty_to_close = qty if qty is not None else position.qty
@@ -284,7 +313,7 @@ class BinanceLiveExchange(ExchangeClient):
         if self.notifier:
             self.notifier.notify_exit(symbol, position.side, qty_to_close, price, pnl, reason, self.mode_name)
         if position.qty <= 1e-8:
-            self._position = None
+            self._positions.pop(symbol.upper(), None)
 
     async def _place_market_order(self, symbol: str, side: str, qty: float, reduce_only: bool):
         params = {
@@ -304,9 +333,34 @@ class BinanceLiveExchange(ExchangeClient):
         query += f"&signature={signature}"
         headers = {"X-MBX-APIKEY": self.api_key}
         url = f"{path}?{query}"
-        response = await self._session.request(method, url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        max_retries = 5
+        base_delay = 60.0
+        attempt = 0
+        while True:
+            try:
+                response = await self._session.request(method, url, headers=headers)
+            except Exception as exc:
+                attempt += 1
+                if attempt > max_retries:
+                    self.logger.error("Network error after retries: %s", exc)
+                    raise
+                self.logger.warning("Network error: %s. Retrying in %.0fs", exc, base_delay)
+                await asyncio.sleep(base_delay)
+                continue
+
+            if response.status_code >= 500:
+                attempt += 1
+                if attempt > max_retries:
+                    self.logger.error("Server error %s: %s", response.status_code, response.text)
+                    response.raise_for_status()
+                self.logger.warning("Server error %s. Retrying in %.0fs", response.status_code, base_delay)
+                await asyncio.sleep(base_delay)
+                continue
+
+            if response.status_code >= 400:
+                self.logger.error("Binance error %s: %s", response.status_code, response.text)
+                response.raise_for_status()
+            return response.json()
 
 
 class BinanceCandleStream:
@@ -396,3 +450,19 @@ class BinanceRestClient:
                 }
             )
         return candles
+
+    async def fetch_exchange_info(self) -> Dict[str, Any]:
+        base_url = "https://fapi.binance.com/fapi/v1/exchangeInfo"
+        if httpx is not None:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(base_url)
+                resp.raise_for_status()
+                return resp.json()
+        url = base_url
+        loop = asyncio.get_running_loop()
+
+        def _blocking_request():
+            with urllib.request.urlopen(url, timeout=15) as response:
+                return json.loads(response.read().decode("utf-8"))
+
+        return await loop.run_in_executor(None, _blocking_request)

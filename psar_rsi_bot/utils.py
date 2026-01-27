@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency
+    load_dotenv = None
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -20,6 +24,8 @@ def load_env(env_path: Optional[str] = None) -> Dict[str, str]:
     """
     env_file = Path(env_path) if env_path else Path(__file__).resolve().parents[1] / ".env"
     values: Dict[str, str] = {}
+    if load_dotenv:
+        load_dotenv(env_file)
     if env_file.exists():
         for raw_line in env_file.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()

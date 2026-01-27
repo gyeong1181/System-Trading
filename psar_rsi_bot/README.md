@@ -6,8 +6,8 @@
 - 롱: PSAR 상승 전환 & 종가 > EMA200 & RSI > 50
 - 숏: PSAR 하락 전환 & 종가 < EMA200 & RSI < 50
 - 스탑: 스윙 고저점 기준
-- 목표: 기본 2R
-- 옵션: PSAR 플립 시 조기 청산
+- 목표: 기본 2R (현재 비활성)
+- 청산: PSAR 플립 신호 청산 통일 (TP OFF)
 
 ## 실행 준비
 1) 의존성 설치
@@ -17,12 +17,17 @@ pip install -r requirements.txt
 2) .env 작성
 - 실거래 키: `BINANCE_API_KEY`, `BINANCE_API_SECRET`
 - 모드: `PSAR_RSI_PAPER_MODE=true|false`
-- 선택: `PSAR_RSI_SYMBOL`, `PSAR_RSI_INTERVAL`, `PSAR_RSI_RISK_PCT`, `PSAR_RSI_RR`, `PSAR_RSI_SWING_LOOKBACK`, `PSAR_RSI_LEVERAGE`, `PSAR_RSI_EXIT_ON_FLIP`
+- 선택: `PSAR_RSI_SYMBOL`, `PSAR_RSI_SYMBOLS`, `PSAR_RSI_INTERVAL`, `PSAR_RSI_RISK_PCT`, `PSAR_RSI_RR`, `PSAR_RSI_SWING_LOOKBACK`, `PSAR_RSI_LEVERAGE`, `PSAR_RSI_EXIT_ON_FLIP`
+- 리스크: `PSAR_RSI_MAX_NOTIONALS`, `PSAR_RSI_RESERVE`, `PSAR_RSI_MARGIN_BUFFER`, `PSAR_RSI_ALERT_COOLDOWN_SEC`
 
 ## 실행 예시
 - 페이퍼(실시간)
 ```bash
 python psar_rsi_strategy.py --live --paper --symbol BTCUSDT --interval 1h
+```
+- 멀티 심볼 (예: BTC+SOL)
+```bash
+python psar_rsi_strategy.py --live --paper --symbols BTCUSDT,SOLUSDT --interval 1h
 ```
 - 실거래
 ```bash
