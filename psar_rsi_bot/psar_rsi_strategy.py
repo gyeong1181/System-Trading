@@ -4,7 +4,9 @@ import argparse
 import asyncio
 import csv
 import os
+import sqlite3
 import time
+import math
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -24,6 +26,7 @@ from exchange import (
 from indicators import compute_psar_rsi_ema
 from reports import TradeReporter
 from utils import Candle, get_logger, load_env
+from risk_manager import RiskManager, parse_max_notional_map
 
 
 class BinanceWebSocket:
@@ -91,6 +94,7 @@ def send_telegram_message(env: dict, message: str) -> None:
     token = env.get("TELEGRAM_BOT_TOKEN")
     chat_id = env.get("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
+        print("Telegram notify skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing")
         return
     try:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -99,6 +103,64 @@ def send_telegram_message(env: dict, message: str) -> None:
             pass
     except Exception as exc:
         print(f"Telegram notify error: {exc}")
+
+
+class TelegramNotifier:
+    def __init__(self, env: dict):
+        self.env = env
+
+    def notify_entry(self, symbol: str, side: str, qty: float, price: float, mode: str):
+        send_telegram_message(
+            self.env,
+            f"[{mode}] ENTRY {symbol} {side.upper()} qty={qty:.6f} price={price:.2f}",
+        )
+
+    def notify_exit(self, symbol: str, side: str, qty: float, price: float, pnl: float, reason: str, mode: str):
+        send_telegram_message(
+            self.env,
+            f"[{mode}] EXIT {symbol} {side.upper()} qty={qty:.6f} price={price:.2f}\n"
+            f"pnl={pnl:.2f} reason={reason}",
+        )
+
+
+def init_sqlite(db_path: str = "trading_data.db") -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                side TEXT NOT NULL,
+                price REAL NOT NULL,
+                qty REAL NOT NULL,
+                pnl_pct REAL NOT NULL,
+                signal TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+
+def log_trade_db(
+    db_path: str,
+    timestamp: str,
+    symbol: str,
+    side: str,
+    price: float,
+    qty: float,
+    pnl_pct: float,
+    signal: str,
+) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO trades (timestamp, symbol, side, price, qty, pnl_pct, signal)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (timestamp, symbol, side, price, qty, pnl_pct, signal),
+        )
+        conn.commit()
 
 
 @dataclass
@@ -115,6 +177,7 @@ class PsarRsiConfig:
     leverage: float = 1.0
     max_bars: int = 2000
     exit_on_psar_flip: bool = True
+    use_heikin_ashi: bool = True
 
 
 class PsarRsiTrader:
@@ -123,16 +186,29 @@ class PsarRsiTrader:
     진입 조건(마감봉 기준):
       - 롱: PSAR가 상승 전환 AND 종가 > EMA200 AND RSI > 50
       - 숏: PSAR가 하락 전환 AND 종가 < EMA200 AND RSI < 50
-    리스크: 최근 스윙 고점/저점을 스탑으로, 기본 2R 목표가.
+    리스크: 최근 스윙 고점/저점을 스탑으로, TP는 비활성(신호 청산 통일).
     """
 
-    def __init__(self, config: PsarRsiConfig, exchange: ExchangeClient, reporter: Optional[TradeReporter] = None):
+    def __init__(
+        self,
+        config: PsarRsiConfig,
+        exchange: ExchangeClient,
+        reporter: Optional[TradeReporter] = None,
+        env: Optional[dict] = None,
+        risk_manager: Optional[RiskManager] = None,
+    ):
         self.config = config
         self.exchange = exchange
         self.logger = get_logger("PsarRsiTrader")
         self.reporter = reporter or TradeReporter()
         self.df = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
         self.indicator_df = self.df.copy()
+        self.db_path = "trading_data.db"
+        self.env = env or {}
+        self.risk_manager = risk_manager
+
+    def _notify(self, message: str) -> None:
+        send_telegram_message(self.env, message)
 
     async def handle_candle(self, candle: Candle):
         if not candle.closed:
@@ -168,6 +244,7 @@ class PsarRsiTrader:
             rsi_length=self.config.rsi_length,
             psar_step=self.config.psar_step,
             psar_max_step=self.config.psar_max_step,
+            use_heikin_ashi=self.config.use_heikin_ashi,
         )
         latest = self.indicator_df.iloc[-1]
         prev = self.indicator_df.iloc[-2]
@@ -190,10 +267,10 @@ class PsarRsiTrader:
                 price,
             )
 
-        position = self.exchange.position
+        position = self.exchange.get_position(self.config.symbol)
         if position is not None:
             await self._manage_open_position(latest)
-            position = self.exchange.position  # refresh after potential exit
+            position = self.exchange.get_position(self.config.symbol)  # refresh after potential exit
         if position is None:
             await self._check_entries(latest, prev)
 
@@ -212,6 +289,11 @@ class PsarRsiTrader:
         window = self.df.iloc[-self.config.swing_lookback :]
         if window.empty:
             return None
+        if self.config.use_heikin_ashi and {"ha_high", "ha_low"}.issubset(self.indicator_df.columns):
+            window = self.indicator_df.iloc[-self.config.swing_lookback :]
+            if side == "long":
+                return float(window["ha_low"].min())
+            return float(window["ha_high"].max())
         if side == "long":
             return float(window["low"].min())
         return float(window["high"].max())
@@ -229,11 +311,26 @@ class PsarRsiTrader:
             return
 
         equity = await self.exchange.fetch_equity()
-        risk_capital = equity * (self.config.risk_pct / 100) * max(self.config.leverage, 0.01)
-        qty = max(risk_capital / risk_per_unit, 0.0)
-        if qty <= 0:
-            return
+        available_balance = await self.exchange.fetch_available_balance()
 
+        if self.risk_manager:
+            qty, reason = await self.risk_manager.size_and_validate(
+                symbol=self.config.symbol,
+                entry_price=entry,
+                stop_price=swing_stop,
+                equity=equity,
+                available_balance=available_balance,
+            )
+            if qty is None:
+                self.logger.info("Order skipped (%s): %s", reason, self.config.symbol)
+                return
+        else:
+            risk_capital = equity * (self.config.risk_pct / 100) * max(self.config.leverage, 0.01)
+            qty = max(risk_capital / risk_per_unit, 0.0)
+            if qty <= 0:
+                return
+
+        # TP는 현재 비활성. 신호(PSAR flip) 청산으로 통일.
         if side == "long":
             stop_price = swing_stop
             target_price = entry + self.config.risk_reward * risk_per_unit
@@ -252,8 +349,25 @@ class PsarRsiTrader:
             trail_offset=trail_offset,
             entry_price=entry,
         )
+        if self.risk_manager:
+            self.risk_manager.mark_open(self.config.symbol)
         signal_type = "BUY" if side == "long" else "SELL"
         log_trade_signal(signal_type, self.config.symbol, entry, psar_value, rsi_value, balance=equity)
+        log_trade_db(
+            self.db_path,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            self.config.symbol,
+            side,
+            entry,
+            qty,
+            0.0,
+            signal_type,
+        )
+        self._notify(
+            f"[ENTRY] {signal_type} {self.config.symbol}\n"
+            f"entry={entry:.2f} qty={qty:.6f}\n"
+            f"stop={stop_price:.2f} target={target_price:.2f}"
+        )
         self.logger.info(
             "Enter %s | entry=%.4f stop=%.4f target=%.4f risk=%.4f qty=%.6f",
             side,
@@ -264,8 +378,29 @@ class PsarRsiTrader:
             qty,
         )
 
+    def _record_exit(self, position, exit_price: float, reason: str):
+        direction = 1 if position.side == "long" else -1
+        pnl_pct = ((exit_price - position.entry_price) / position.entry_price) * 100 * direction
+        log_trade_db(
+            self.db_path,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            self.config.symbol,
+            position.side,
+            exit_price,
+            position.qty,
+            pnl_pct,
+            reason,
+        )
+        if self.risk_manager:
+            self.risk_manager.mark_closed(self.config.symbol)
+        self._notify(
+            f"[EXIT] {position.side.upper()} {self.config.symbol}\n"
+            f"exit={exit_price:.2f} pnl={pnl_pct:.2f}%\n"
+            f"reason={reason}"
+        )
+
     async def _manage_open_position(self, latest):
-        position = self.exchange.position
+        position = self.exchange.get_position(self.config.symbol)
         if position is None:
             return
 
@@ -275,14 +410,17 @@ class PsarRsiTrader:
         if position.side == "long":
             # stop loss
             if latest["low"] <= position.stop_price:
+                self._record_exit(position, float(position.stop_price), "Stop - swing low")
                 await self.exchange.close_position(self.config.symbol, None, position.stop_price, "Stop - swing low")
                 return
             # take profit
             if latest["high"] >= position.runner_price:
+                self._record_exit(position, float(position.runner_price), "Take Profit 2R")
                 await self.exchange.close_position(self.config.symbol, None, position.runner_price, "Take Profit 2R")
                 return
             # optional PSAR flip exit
             if self.config.exit_on_psar_flip and latest.get("psar_flip_short", False):
+                self._record_exit(position, price, "PSAR flip exit")
                 await self.exchange.close_position(self.config.symbol, None, price, "PSAR flip exit")
                 return
             # tighten stop to new swing lows
@@ -291,12 +429,15 @@ class PsarRsiTrader:
                 position.stop_price = new_stop
         else:
             if latest["high"] >= position.stop_price:
+                self._record_exit(position, float(position.stop_price), "Stop - swing high")
                 await self.exchange.close_position(self.config.symbol, None, position.stop_price, "Stop - swing high")
                 return
             if latest["low"] <= position.runner_price:
+                self._record_exit(position, float(position.runner_price), "Take Profit 2R")
                 await self.exchange.close_position(self.config.symbol, None, position.runner_price, "Take Profit 2R")
                 return
             if self.config.exit_on_psar_flip and latest.get("psar_flip_long", False):
+                self._record_exit(position, price, "PSAR flip exit")
                 await self.exchange.close_position(self.config.symbol, None, price, "PSAR flip exit")
                 return
             new_stop = self._swing_stop("short")
@@ -350,28 +491,59 @@ class PsarRsiTrader:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="PSAR + EMA200 + RSI(50) 전략 실행기")
-    parser.add_argument("--symbol", default=None, help="거래 심볼 (예: BTCUSDT)")
-    parser.add_argument("--interval", default=None, help="바이낸스 캔들 주기 (기본 1h)")
-    parser.add_argument("--risk-pct", type=float, default=None, help="트레이드당 리스크 % (기본 1.0)")
-    parser.add_argument("--rr", type=float, default=None, help="리스크-리워드 배수 (기본 2.0)")
-    parser.add_argument("--swing", type=int, default=None, help="스윙 고저점 탐색 봉 수 (기본 5)")
-    parser.add_argument("--live", action="store_true", help="바이낸스 선물 실시간 WebSocket 사용")
-    parser.add_argument("--paper", dest="paper_mode", action="store_true", help="무조건 페이퍼(모의) 모드")
-    parser.add_argument("--real", dest="paper_mode", action="store_false", help="무조건 실거래 모드")
+    parser = argparse.ArgumentParser(description="PSAR + EMA200 + RSI(50) ?? ???")
+    parser.add_argument("--symbol", default=None, help="?? ?? (?: BTCUSDT)")
+    parser.add_argument("--symbols", default=None, help="Comma-separated symbols (e.g., BTCUSDT,SOLUSDT)")
+    parser.add_argument("--interval", default=None, help="???? ?? ?? (?? 1h)")
+    parser.add_argument("--risk-pct", type=float, default=None, help="????? ??? % (?? 1.0)")
+    parser.add_argument("--rr", type=float, default=None, help="???-??? ?? (?? 2.0)")
+    parser.add_argument("--swing", type=int, default=None, help="?? ??? ?? ? ? (?? 5)")
+    parser.add_argument("--live", action="store_true", help="???? ?? ??? WebSocket ??")
+    parser.add_argument("--paper", dest="paper_mode", action="store_true", help="??? ???(??) ??")
+    parser.add_argument("--real", dest="paper_mode", action="store_false", help="??? ??? ??")
     parser.set_defaults(paper_mode=None)
     parser.add_argument("--paper-bars", type=int, default=750, help="Number of bars for offline paper test")
+    parser.add_argument("--test-order", action="store_true", help="Force a test order (buy then sell after 10s)")
     return parser.parse_args()
+
+
+def _parse_symbols(args, env: dict):
+    raw = args.symbols or env.get("PSAR_RSI_SYMBOLS")
+    if raw:
+        return [s.strip().upper() for s in raw.split(",") if s.strip()]
+    symbol = args.symbol or env.get("PSAR_RSI_SYMBOL") or env.get("BTC_TREND_SYMBOL") or "BTCUSDT"
+    return [symbol.upper()]
 
 
 async def main():
     init_trade_log()
     args = parse_args()
     env = load_env()
-    send_telegram_message(env, "PSAR RSI bot started")
+    init_sqlite()
 
-    symbol = args.symbol or env.get("PSAR_RSI_SYMBOL") or env.get("BTC_TREND_SYMBOL") or "BTCUSDT"
+    symbols = _parse_symbols(args, env)
+    symbol = symbols[0]
     interval = args.interval or env.get("PSAR_RSI_INTERVAL") or "1h"
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    mode = (
+        "REAL"
+        if (
+            args.paper_mode is False
+            or (
+                args.paper_mode is None
+                and (env.get("PSAR_RSI_PAPER_MODE") or env.get("BTC_TREND_PAPER_MODE", "true")).lower()
+                in ("0", "false", "no", "off")
+            )
+        )
+        else "PAPER"
+    )
+    send_telegram_message(
+        env,
+        "⚡ PSAR RSI Bot Online\n"
+        f"time={now}\n"
+        f"mode={mode}\n"
+        f"symbols={','.join(symbols)} interval={interval}",
+    )
     risk_pct_env = env.get("PSAR_RSI_RISK_PCT") or env.get("BTC_TREND_RISK_PCT")
     risk_pct = args.risk_pct if args.risk_pct is not None else float(risk_pct_env or 1.0)
     rr_env = env.get("PSAR_RSI_RR") or env.get("PSAR_RSI_RISK_REWARD")
@@ -383,7 +555,7 @@ async def main():
     exit_on_flip_env = env.get("PSAR_RSI_EXIT_ON_FLIP", "true").lower()
     exit_on_flip = exit_on_flip_env not in ("0", "false", "no", "off")
 
-    config = PsarRsiConfig(
+    base_config = PsarRsiConfig(
         symbol=symbol,
         interval=interval,
         risk_pct=risk_pct,
@@ -391,6 +563,23 @@ async def main():
         swing_lookback=swing_lookback,
         leverage=leverage,
         exit_on_psar_flip=exit_on_flip,
+        use_heikin_ashi=True,
+    )
+
+    max_notional_map = parse_max_notional_map(env.get("PSAR_RSI_MAX_NOTIONALS"))
+    reserve = float(env.get("PSAR_RSI_RESERVE", "0") or 0)
+    margin_buffer = float(env.get("PSAR_RSI_MARGIN_BUFFER", "0.05") or 0.05)
+    cooldown_sec = int(env.get("PSAR_RSI_ALERT_COOLDOWN_SEC", "900") or 900)
+    rest_client = BinanceRestClient()
+    risk_manager = RiskManager(
+        rest_client=rest_client,
+        notify_fn=lambda msg: send_telegram_message(env, msg),
+        max_notional_by_symbol=max_notional_map,
+        reserve=reserve,
+        leverage=leverage,
+        risk_pct=risk_pct,
+        margin_buffer=margin_buffer,
+        cooldown_sec=cooldown_sec,
     )
 
     reporter = TradeReporter()
@@ -400,23 +589,86 @@ async def main():
         env_paper = env.get("PSAR_RSI_PAPER_MODE") or env.get("BTC_TREND_PAPER_MODE", "true")
         paper_mode = env_paper.lower() not in ("0", "false", "no", "off")
 
+    notifier = TelegramNotifier(env)
     if paper_mode:
-        exchange_client: ExchangeClient = PaperExchangeClient(starting_equity=10000.0, reporter=reporter)
+        exchange_client: ExchangeClient = PaperExchangeClient(
+            starting_equity=10000.0,
+            reporter=reporter,
+            notifier=notifier,
+        )
     else:
         api_key = env.get("BINANCE_API_KEY") or env.get("API_KEY")
         api_secret = env.get("BINANCE_API_SECRET") or env.get("SECRET_KEY")
         if not api_key or not api_secret:
             raise RuntimeError("BINANCE_API_KEY and BINANCE_API_SECRET are required for real trading mode")
-        exchange_client = BinanceLiveExchange(api_key=api_key, api_secret=api_secret, reporter=reporter)
+        exchange_client = BinanceLiveExchange(
+            api_key=api_key,
+            api_secret=api_secret,
+            reporter=reporter,
+            notifier=notifier,
+        )
 
-    bot = PsarRsiTrader(config, exchange_client, reporter=reporter)
+    bots = []
+    for sym in symbols:
+        cfg = PsarRsiConfig(
+            symbol=sym,
+            interval=base_config.interval,
+            risk_pct=base_config.risk_pct,
+            risk_reward=base_config.risk_reward,
+            swing_lookback=base_config.swing_lookback,
+            leverage=base_config.leverage,
+            exit_on_psar_flip=base_config.exit_on_psar_flip,
+            use_heikin_ashi=base_config.use_heikin_ashi,
+        )
+        bots.append(PsarRsiTrader(cfg, exchange_client, reporter=reporter, env=env, risk_manager=risk_manager))
 
     try:
-        if args.live:
-            await bot.warmup_with_rest(bars=500)
-            await bot.run_live()
-        else:
-            await bot.run_paper_test(bars=args.paper_bars)
+        if args.test_order:
+            candles = await rest_client.fetch_klines(symbol, interval, limit=2)
+            last_close = candles[-1]["close"] if candles else 0.0
+            if last_close <= 0:
+                raise RuntimeError("Unable to fetch price for test order")
+            available_balance = await exchange_client.fetch_available_balance()
+            equity = await exchange_client.fetch_equity()
+            qty, reason = await risk_manager.size_and_validate(
+                symbol=symbol,
+                entry_price=last_close,
+                stop_price=last_close * 0.98,
+                equity=equity,
+                available_balance=available_balance,
+            )
+            if qty is None:
+                raise RuntimeError(f"Test order blocked: {reason}")
+            await exchange_client.enter_position(
+                symbol=symbol,
+                side="long",
+                qty=qty,
+                stop_price=last_close * 0.98,
+                tp1_price=last_close * 1.02,
+                runner_price=last_close * 1.02,
+                trail_offset=last_close * 0.01,
+                entry_price=last_close,
+            )
+            await asyncio.sleep(10)
+            candles = await rest_client.fetch_klines(symbol, interval, limit=2)
+            last_close = candles[-1]["close"] if candles else last_close
+            await exchange_client.close_position(symbol, None, last_close, "Test order exit")
+            send_telegram_message(env, "✅ Test order completed (buy → sell)")
+            return
+
+        try:
+            if args.live:
+                tasks = []
+                for bot in bots:
+                    tasks.append(bot.warmup_with_rest(bars=500))
+                if tasks:
+                    await asyncio.gather(*tasks)
+                await asyncio.gather(*(bot.run_live() for bot in bots))
+            else:
+                await asyncio.gather(*(bot.run_paper_test(bars=args.paper_bars) for bot in bots))
+        except Exception as exc:
+            send_telegram_message(env, f"🚨 Bot error: {exc}")
+            raise
     finally:
         close_fn = getattr(exchange_client, "close", None)
         if callable(close_fn):

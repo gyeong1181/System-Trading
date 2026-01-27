@@ -145,6 +145,7 @@ def compute_psar_rsi_ema(
     rsi_length: int = 14,
     psar_step: float = 0.02,
     psar_max_step: float = 0.2,
+    use_heikin_ashi: bool = True,
 ) -> pd.DataFrame:
     """
     Compute indicators required for the PSAR + RSI + EMA strategy.
@@ -159,9 +160,31 @@ def compute_psar_rsi_ema(
         return df
 
     out = df.copy()
-    out["ema"] = ema(out["close"], ema_length)
-    out["rsi"] = rsi(out["close"], length=rsi_length)
-    psar_vals, psar_bull = parabolic_sar(out, step=psar_step, max_step=psar_max_step)
+    price_df = out
+    if use_heikin_ashi:
+        ha_close = (out["open"] + out["high"] + out["low"] + out["close"]) / 4
+        ha_open = ha_close.copy()
+        ha_open.iloc[0] = (out["open"].iloc[0] + out["close"].iloc[0]) / 2
+        for i in range(1, len(out)):
+            ha_open.iloc[i] = (ha_open.iloc[i - 1] + ha_close.iloc[i - 1]) / 2
+        ha_high = pd.concat([out["high"], ha_open, ha_close], axis=1).max(axis=1)
+        ha_low = pd.concat([out["low"], ha_open, ha_close], axis=1).min(axis=1)
+        out["ha_open"] = ha_open
+        out["ha_high"] = ha_high
+        out["ha_low"] = ha_low
+        out["ha_close"] = ha_close
+        price_df = out.rename(
+            columns={
+                "ha_open": "open",
+                "ha_high": "high",
+                "ha_low": "low",
+                "ha_close": "close",
+            }
+        )[["open", "high", "low", "close"]]
+
+    out["ema"] = ema(price_df["close"], ema_length)
+    out["rsi"] = rsi(price_df["close"], length=rsi_length)
+    psar_vals, psar_bull = parabolic_sar(price_df, step=psar_step, max_step=psar_max_step)
     out["psar"] = psar_vals
     out["psar_bull"] = psar_bull
     prev_trend = psar_bull.shift(1)
