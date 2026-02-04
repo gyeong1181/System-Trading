@@ -10,5 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . ./
 
-# Default: live paper mode on 1h. Override with docker-compose or docker run args.
-CMD ["python", "psar_rsi_strategy.py", "--live", "--paper", "--symbol", "BTCUSDT", "--interval", "1h"]
+# Default: TradingView webhook executor
+CMD ["uvicorn", "webhook_server:app", "--host", "0.0.0.0", "--port", "8000"]

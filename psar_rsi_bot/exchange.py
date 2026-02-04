@@ -21,7 +21,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     websockets = None
 
-from utils import Candle, get_logger
+from utils import Candle, get_logger, get_app_logger
 from reports import TradeReporter
 
 
@@ -203,6 +203,7 @@ class BinanceLiveExchange(ExchangeClient):
         reporter: Optional[TradeReporter] = None,
         fee_rate: float = 0.0005,
         notifier=None,
+        alert_cb=None,
     ):
         if httpx is None:
             raise RuntimeError("httpx is required for live trading")
@@ -211,11 +212,13 @@ class BinanceLiveExchange(ExchangeClient):
         self.reporter = reporter
         self.notifier = notifier
         self.logger = get_logger("BinanceLive")
+        self.app_logger = get_app_logger()
         self._positions: Dict[str, Position] = {}
         self.fee_rate = fee_rate
         self._session = httpx.AsyncClient(base_url=self.BASE_URL, timeout=15)
         self.mode_name = "LIVE"
         self._equity_cache: float = 0.0
+        self.alert_cb = alert_cb
 
     async def close(self):
         await self._session.aclose()
@@ -358,7 +361,15 @@ class BinanceLiveExchange(ExchangeClient):
                 continue
 
             if response.status_code >= 400:
-                self.logger.error("Binance error %s: %s", response.status_code, response.text)
+                msg = f"Binance error {response.status_code}: {response.text}"
+                self.logger.error(msg)
+                self.app_logger.error(msg)
+                if self.alert_cb:
+                    self.alert_cb(
+                        f"[API ERROR] status={response.status_code}\n"
+                        f"endpoint={path}\n"
+                        f"detail={response.text}"
+                    )
                 response.raise_for_status()
             return response.json()
 
@@ -369,6 +380,7 @@ class BinanceCandleStream:
         self.interval = interval
         self.url = f"wss://fstream.binance.com/ws/{self.symbol}@kline_{interval}"
         self.logger = logger or get_logger("BinanceStream")
+        self.app_logger = get_app_logger()
         self._task: Optional[asyncio.Task] = None
         self._stop_event = asyncio.Event()
 
@@ -408,6 +420,7 @@ class BinanceCandleStream:
                             self.logger.info("Handler completed")
             except Exception as exc:
                 self.logger.warning("Stream error %s. Reconnecting...", exc)
+                self.app_logger.warning("Stream error %s. Reconnecting...", exc)
                 await asyncio.sleep(3)
 
     async def stop(self):

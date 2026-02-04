@@ -18,6 +18,8 @@ config.py # <--- API 키가 이 파일에 직접 있다면 반드시 무시해�
 *.csv
 *.xlsx
 reports/
+**/data/
+*.db
 
 # 운영체제에서 자동으로 생성하는 파일
 .DS_Store # macOS

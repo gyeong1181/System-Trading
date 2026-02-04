@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+APP_LOG_FILE = LOG_DIR / "app.log"
 
 
 def load_env(env_path: Optional[str] = None) -> Dict[str, str]:
@@ -60,6 +61,25 @@ def get_logger(name: str = "BTCTrendFollower", level: int = logging.INFO, log_to
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
+    logger.propagate = False
+    return logger
+
+
+def get_app_logger(level: int = logging.INFO) -> logging.Logger:
+    """
+    Logger for system warnings and API errors.
+    """
+    logger = logging.getLogger("AppLog")
+    if logger.handlers:
+        return logger
+    logger.setLevel(level)
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    file_handler = logging.FileHandler(APP_LOG_FILE, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
     logger.propagate = False
     return logger
 

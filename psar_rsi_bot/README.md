@@ -1,64 +1,141 @@
-﻿# PSAR + EMA200 + RSI 자동매매 봇 (파라볼릭 전략)
+﻿# TradingView Webhook 기반 자동매매 Executor
 
-트레이딩뷰 아이디어(PSAR 전환 + EMA200 방향 + RSI 50 필터)를 파이썬으로 구현한 선물 자동매매 봇입니다. AWS EC2에서 24시간 구동하며, GitHub Actions로 자동 배포/재시작합니다.
+TradingView에서 전략 신호를 계산하고, 서버는 **주문 실행기(Executor)**로만 동작하도록 전환했습니다.  
+기존 전략 복제 실패 문제를 해결하고, 운영/검증/증빙 중심의 포트폴리오로 마감합니다.
 
-## 전략 개요
-- 롱: PSAR 상승 전환 & 종가 > EMA200 & RSI > 50
-- 숏: PSAR 하락 전환 & 종가 < EMA200 & RSI < 50
-- 스탑: 스윙 고저점 기준
-- 목표: 기본 2R (현재 비활성)
-- 청산: PSAR 플립 신호 청산 통일 (TP OFF)
+## 핵심 원칙
+- 전략 계산은 TradingView에서만 수행
+- 서버는 Webhook 수신 + 주문 실행 + 기록/알림만 담당
+- BTCUSDT, SOLUSDT 1시간봉 / LONG+SHORT 지원
 
-## 실행 준비
-1) 의존성 설치
-```bash
-pip install -r requirements.txt
-```
-2) .env 작성
-- 실거래 키: `BINANCE_API_KEY`, `BINANCE_API_SECRET`
-- 모드: `PSAR_RSI_PAPER_MODE=true|false`
-- 선택: `PSAR_RSI_SYMBOL`, `PSAR_RSI_SYMBOLS`, `PSAR_RSI_INTERVAL`, `PSAR_RSI_RISK_PCT`, `PSAR_RSI_RR`, `PSAR_RSI_SWING_LOOKBACK`, `PSAR_RSI_LEVERAGE`, `PSAR_RSI_EXIT_ON_FLIP`
-- 리스크: `PSAR_RSI_MAX_NOTIONALS`, `PSAR_RSI_RESERVE`, `PSAR_RSI_MARGIN_BUFFER`, `PSAR_RSI_ALERT_COOLDOWN_SEC`
+---
 
-## 실행 예시
-- 페이퍼(실시간)
-```bash
-python psar_rsi_strategy.py --live --paper --symbol BTCUSDT --interval 1h
-```
-- 멀티 심볼 (예: BTC+SOL)
-```bash
-python psar_rsi_strategy.py --live --paper --symbols BTCUSDT,SOLUSDT --interval 1h
-```
-- 실거래
-```bash
-python psar_rsi_strategy.py --live --real --symbol BTCUSDT --interval 1h
+## 아키텍처
+```mermaid
+flowchart LR
+    TV[TradingView Alert] --> API[FastAPI /tv/webhook]
+    API --> DB[(SQLite: signals, orders)]
+    API --> BINANCE[Binance Futures]
+    API --> CW[CloudWatch Logs]
+    API --> TG[Telegram Alert]
+    GHA[GitHub Actions] --> API
 ```
 
-## Docker 실행 (선택)
-> systemd와 Docker를 동시에 사용하면 중복 실행될 수 있습니다. 한 가지만 사용하세요.
+![Architecture](docs/Architecture/Architecture.png)
+![Mermaid Architecture](docs/Architecture/Mermaid_Architecture.png)
 
+---
+
+## 실행 모드
+- `RECEIVE_ONLY`: 수신/검증/저장/알림만
+- `DRY_RUN`: 주문 파라미터 산출만
+- `LIVE`: 실제 주문 실행
+
+---
+
+## 포지션 정책
+- 동일 심볼 중복 포지션 없음
+- 반대 포지션 존재 시: reduceOnly 청산 후 신규 진입
+- 진입 시 Stop-Market 손절 강제
+
+---
+
+## 실행 방법 (복붙용)
+### 로컬 실행
 ```bash
+cd psar_rsi_bot
+uvicorn webhook_server:app --host 0.0.0.0 --port 8000
+```
+
+Webhook Endpoint:
+- `POST /tv/webhook`
+- `GET /health`
+
+예시 URL:
+- `http://<server-ip>:8000/tv/webhook`
+
+### Docker 실행
+```bash
+cd psar_rsi_bot
 docker compose up -d --build
 docker compose logs -f
 ```
 
-## 운영/배포
-- GitHub Actions → EC2 `/opt/psar_rsi_bot`로 rsync
-- systemd로 상시 실행
+---
+
+## TradingView Webhook JSON 템플릿
+### OPEN LONG
+```json
+{
+  "secret": "YOUR_SECRET",
+  "strategy_id": "azzam_psar",
+  "symbol": "{{ticker}}",
+  "timeframe": "1h",
+  "action": "OPEN",
+  "side": "LONG",
+  "signal_time": "{{timenow}}",
+  "signal_id": "{{timenow}}_{{ticker}}_OPEN_LONG"
+}
+```
+
+### CLOSE LONG
+```json
+{
+  "secret": "YOUR_SECRET",
+  "strategy_id": "azzam_psar",
+  "symbol": "{{ticker}}",
+  "timeframe": "1h",
+  "action": "CLOSE",
+  "side": "LONG",
+  "signal_time": "{{timenow}}",
+  "signal_id": "{{timenow}}_{{ticker}}_CLOSE_LONG"
+}
+```
+
+### OPEN SHORT / CLOSE SHORT
+`side`만 `SHORT`으로 변경해 동일 형식 사용
+
+---
+
+## 환경 변수 (.env)
+필수:
+- `TV_WEBHOOK_SECRET`
+- `EXECUTION_MODE` (RECEIVE_ONLY | DRY_RUN | LIVE)
+- `BINANCE_API_KEY`, `BINANCE_API_SECRET` (LIVE)
+- `BTC_ORDER_USDT`, `SOL_ORDER_USDT`
+- `SL_PCT_BTC`, `SL_PCT_SOL`
+
+선택:
+- `TV_ALLOWED_SYMBOLS`, `TV_ALLOWED_TIMEFRAMES`
+- `LEVERAGE_DEFAULT`, `RESERVE_USDT`, `MARGIN_BUFFER`
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+
+---
+
+## DB 구조
+- `data/bot.db`
+- `signals`: 수신 신호 기록 + 중복 방지
+- `orders`: 주문 요청/응답 기록
+
+---
+
+## 검증 플로우
+1. RECEIVE_ONLY로 테스트 알림 3회 수신
+2. DRY_RUN으로 주문 파라미터 검증
+3. LIVE로 최소 주문 1회 성공 (증거 캡처)
+
+---
+
+## 운영/배포 (systemd)
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart psar_rsi_bot
 sudo systemctl status psar_rsi_bot --no-pager
 ```
 
-## 로그/리포트
-- 로그: `logs/psar_rsi_bot.log`
-- 거래 로그: `reports/trade_log.csv`
-- 에쿼티: `reports/equity_curve.csv`
+systemd 유닛 템플릿: `deploy/psar_rsi_webhook.service`
 
-## 아키텍처/운영 증빙
-![Architecture](docs/Architecture/Architecture.png)
-![Mermaid Architecture](docs/Architecture/Mermaid_Architecture.png)
-![CloudWatch Logs Insights](docs/cloudwatch_insights2.png)
-![GitHub Actions](docs/Github_Actions_CICD_capture.png)
-![Telegram Alert](docs/telegram_alert.png)
+---
+
+## 참고
+- 기존 `psar_rsi_strategy.py`는 **검증/참고용**으로 유지

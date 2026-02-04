@@ -23,9 +23,9 @@ from exchange import (
     ExchangeClient,
     PaperExchangeClient,
 )
-from indicators import compute_psar_rsi_ema
+from indicators_fixed import compute_psar_rsi_ema
 from reports import TradeReporter
-from utils import Candle, get_logger, load_env
+from utils import Candle, get_logger, load_env, get_app_logger
 from risk_manager import RiskManager, parse_max_notional_map
 
 
@@ -520,6 +520,7 @@ async def main():
     args = parse_args()
     env = load_env()
     init_sqlite()
+    app_logger = get_app_logger()
 
     symbols = _parse_symbols(args, env)
     symbol = symbols[0]
@@ -606,6 +607,7 @@ async def main():
             api_secret=api_secret,
             reporter=reporter,
             notifier=notifier,
+            alert_cb=lambda msg: send_telegram_message(env, msg),
         )
 
     bots = []
@@ -667,6 +669,7 @@ async def main():
             else:
                 await asyncio.gather(*(bot.run_paper_test(bars=args.paper_bars) for bot in bots))
         except Exception as exc:
+            app_logger.error("System error: %s", exc)
             send_telegram_message(env, f"🚨 Bot error: {exc}")
             raise
     finally:
