@@ -113,7 +113,29 @@ class BinanceFuturesExecutor:
             "reduceOnly": "true" if reduce_only else "false",
             "workingType": "MARK_PRICE",
         }
-        return await self._signed_request("POST", "/fapi/v1/order", params)
+        try:
+            return await self._signed_request("POST", "/fapi/v1/order", params)
+        except httpx.HTTPStatusError as exc:
+            text = exc.response.text if exc.response else str(exc)
+            # Some accounts/endpoints reject STOP_MARKET and require algo or STOP limit.
+            if "Order type not supported" in text or "\"code\":-4120" in text:
+                self.logger.warning("STOP_MARKET not supported, falling back to STOP limit")
+                self.app_logger.warning(
+                    "STOP_MARKET not supported, fallback to STOP limit: %s", text
+                )
+                params_limit = {
+                    "symbol": symbol.upper(),
+                    "side": side,
+                    "type": "STOP",
+                    "stopPrice": f"{stop_price:.6f}",
+                    "price": f"{stop_price:.6f}",
+                    "timeInForce": "GTC",
+                    "quantity": f"{qty:.6f}",
+                    "reduceOnly": "true" if reduce_only else "false",
+                    "workingType": "MARK_PRICE",
+                }
+                return await self._signed_request("POST", "/fapi/v1/order", params_limit)
+            raise
 
     async def ensure_oneway_mode(self):
         try:
