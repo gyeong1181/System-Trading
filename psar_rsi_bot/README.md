@@ -50,6 +50,7 @@ uvicorn webhook_server:app --host 0.0.0.0 --port 8000
 Webhook Endpoint:
 - `POST /tv/webhook`
 - `GET /health`
+- `GET /metrics` (Prometheus)
 
 예시 URL:
 - `http://<server-ip>:8000/tv/webhook`
@@ -60,6 +61,28 @@ cd psar_rsi_bot
 docker compose up -d --build
 docker compose logs -f
 ```
+
+---
+
+## Prometheus 연동 (최소 구성)
+1. `prometheus.yml` 준비: `deploy/prometheus.yml`
+2. Prometheus 실행 예시:
+```bash
+prometheus --config.file=/path/to/prometheus.yml
+```
+3. 확인:
+- `http://<server-ip>:8000/metrics`
+- `http://<server-ip>:9090/targets`
+
+수집되는 핵심 메트릭 예시:
+- `webhook_received_total`
+- `webhook_result_total`
+- `webhook_process_seconds`
+- `order_result_total`
+- `order_skip_total`
+- `binance_api_error_total`
+- `telegram_send_total`
+- `telegram_send_fail_total`
 
 ---
 
@@ -107,8 +130,13 @@ docker compose logs -f
 
 선택:
 - `TV_ALLOWED_SYMBOLS`, `TV_ALLOWED_TIMEFRAMES`
+- `TV_ALLOWED_TIMEFRAMES_BY_SYMBOL` (예: `BTCUSDT:1h,SOLUSDT:1h`)
 - `LEVERAGE_DEFAULT`, `RESERVE_USDT`, `MARGIN_BUFFER`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- 주문 금액 모드:
+  - `ORDER_SIZING_MODE=FIXED` + `BTC_ORDER_USDT`, `SOL_ORDER_USDT`
+  - `ORDER_SIZING_MODE=EQUITY_PCT` + `BTC_ORDER_EQUITY_PCT`, `SOL_ORDER_EQUITY_PCT`
+  - `ORDER_SIZING_MODE=EFFECTIVE_LEVERAGE` + `TOTAL_TARGET_LEVERAGE`, `OPERATING_CAPITAL_RATIO`, `SYMBOL_WEIGHTS`, `PRESET_SYMBOL_LEVERAGE`
 
 ---
 

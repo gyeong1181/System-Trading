@@ -15,35 +15,46 @@ from utils import get_logger, get_app_logger
 
 class BinanceFuturesExecutor:
     BASE_URL = "https://fapi.binance.com"
+    PAPI_URL = "https://papi.binance.com"
 
     def __init__(
         self,
         api_key: str,
         api_secret: str,
         alert_cb=None,
+        api_error_cb=None,
     ):
         self.api_key = api_key
         self.api_secret = api_secret.encode()
         self.logger = get_logger("BinanceExecutor")
         self.app_logger = get_app_logger()
         self.alert_cb = alert_cb
+        self.api_error_cb = api_error_cb
         self._session = httpx.AsyncClient(base_url=self.BASE_URL, timeout=15)
 
     async def close(self):
         await self._session.aclose()
 
     async def _signed_request(self, method: str, path: str, params: Dict[str, Any]):
+        return await self._signed_request_to(self.BASE_URL, method, path, params)
+
+    async def _signed_request_to(self, base_url: str, method: str, path: str, params: Dict[str, Any]):
         params = {k: str(v) for k, v in params.items()}
         params["timestamp"] = str(int(time.time() * 1000))
         query = urllib.parse.urlencode(params, doseq=True)
         signature = hmac.new(self.api_secret, query.encode(), hashlib.sha256).hexdigest()
-        url = f"{path}?{query}&signature={signature}"
+        url = f"{base_url}{path}?{query}&signature={signature}"
         headers = {"X-MBX-APIKEY": self.api_key}
         response = await self._session.request(method, url, headers=headers)
         if response.status_code >= 400:
             msg = f"Binance error {response.status_code}: {response.text}"
             self.logger.error(msg)
             self.app_logger.error(msg)
+            if self.api_error_cb:
+                try:
+                    self.api_error_cb(path=path, status_code=response.status_code)
+                except Exception:
+                    pass
             if self.alert_cb:
                 self.alert_cb(
                     f"[API ERROR] status={response.status_code}\nendpoint={path}\ndetail={response.text}"
@@ -56,6 +67,13 @@ class BinanceFuturesExecutor:
         usdt = next((item for item in data if item.get("asset") == "USDT"), None)
         if usdt:
             return float(usdt.get("availableBalance", usdt.get("balance", 0.0)))
+        return 0.0
+
+    async def get_total_balance(self) -> float:
+        data = await self._signed_request("GET", "/fapi/v2/balance", {})
+        usdt = next((item for item in data if item.get("asset") == "USDT"), None)
+        if usdt:
+            return float(usdt.get("balance", 0.0))
         return 0.0
 
     async def get_mark_price(self, symbol: str) -> float:
@@ -96,6 +114,13 @@ class BinanceFuturesExecutor:
         }
         return await self._signed_request("POST", "/fapi/v1/order", params)
 
+    async def set_leverage(self, symbol: str, leverage: int):
+        params = {
+            "symbol": symbol.upper(),
+            "leverage": int(leverage),
+        }
+        return await self._signed_request("POST", "/fapi/v1/leverage", params)
+
     async def place_stop_market(
         self,
         symbol: str,
@@ -117,24 +142,18 @@ class BinanceFuturesExecutor:
             return await self._signed_request("POST", "/fapi/v1/order", params)
         except httpx.HTTPStatusError as exc:
             text = exc.response.text if exc.response else str(exc)
-            # Some accounts/endpoints reject STOP_MARKET and require algo or STOP limit.
+            # Some accounts require conditional (algo) endpoint for stop orders.
             if "Order type not supported" in text or "\"code\":-4120" in text:
-                self.logger.warning("STOP_MARKET not supported, falling back to STOP limit")
-                self.app_logger.warning(
-                    "STOP_MARKET not supported, fallback to STOP limit: %s", text
+                self.logger.warning(
+                    "STOP_MARKET not supported on /fapi/v1/order, retrying conditional endpoint"
                 )
-                params_limit = {
-                    "symbol": symbol.upper(),
-                    "side": side,
-                    "type": "STOP",
-                    "stopPrice": f"{stop_price:.6f}",
-                    "price": f"{stop_price:.6f}",
-                    "timeInForce": "GTC",
-                    "quantity": f"{qty:.6f}",
-                    "reduceOnly": "true" if reduce_only else "false",
-                    "workingType": "MARK_PRICE",
-                }
-                return await self._signed_request("POST", "/fapi/v1/order", params_limit)
+                self.app_logger.warning(
+                    "STOP_MARKET not supported on /fapi/v1/order, retrying conditional endpoint: %s",
+                    text,
+                )
+                return await self._signed_request_to(
+                    self.PAPI_URL, "POST", "/papi/v1/um/conditional/order", params
+                )
             raise
 
     async def ensure_oneway_mode(self):
