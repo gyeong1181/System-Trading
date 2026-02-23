@@ -9,7 +9,14 @@ from typing import Literal, Optional
 
 import httpx
 from fastapi import FastAPI, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    REGISTRY,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from pydantic import BaseModel, Field
 
 from binance_executor import BinanceFuturesExecutor
@@ -121,41 +128,76 @@ rest_client = BinanceRestClient()
 filter_store = SymbolFilterStore(rest_client)
 APP_START_TS = time.time()
 
-WEBHOOK_RECEIVED_TOTAL = Counter(
+def _get_or_create_counter(name: str, documentation: str, labelnames=()):
+    try:
+        return Counter(name, documentation, labelnames=labelnames)
+    except ValueError:
+        collector = REGISTRY._names_to_collectors.get(name)  # type: ignore[attr-defined]
+        if collector is None:
+            raise
+        return collector
+
+
+def _get_or_create_gauge(name: str, documentation: str, labelnames=()):
+    try:
+        return Gauge(name, documentation, labelnames=labelnames)
+    except ValueError:
+        collector = REGISTRY._names_to_collectors.get(name)  # type: ignore[attr-defined]
+        if collector is None:
+            raise
+        return collector
+
+
+def _get_or_create_histogram(
+    name: str,
+    documentation: str,
+    labelnames=(),
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1),
+):
+    try:
+        return Histogram(name, documentation, labelnames=labelnames, buckets=buckets)
+    except ValueError:
+        collector = REGISTRY._names_to_collectors.get(name)  # type: ignore[attr-defined]
+        if collector is None:
+            raise
+        return collector
+
+
+WEBHOOK_RECEIVED_TOTAL = _get_or_create_counter(
     "webhook_received_total",
     "Total webhook requests received",
     ["symbol"],
 )
-WEBHOOK_RESULT_TOTAL = Counter(
+WEBHOOK_RESULT_TOTAL = _get_or_create_counter(
     "webhook_result_total",
     "Webhook processing result count",
     ["status", "symbol", "action"],
 )
-WEBHOOK_PROCESS_SECONDS = Histogram(
+WEBHOOK_PROCESS_SECONDS = _get_or_create_histogram(
     "webhook_process_seconds",
     "Webhook processing latency in seconds",
     buckets=(0.01, 0.03, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0),
 )
-ORDER_RESULT_TOTAL = Counter(
+ORDER_RESULT_TOTAL = _get_or_create_counter(
     "order_result_total",
     "Order result count",
     ["status", "symbol", "action", "side"],
 )
-ORDER_SKIP_TOTAL = Counter(
+ORDER_SKIP_TOTAL = _get_or_create_counter(
     "order_skip_total",
     "Order skip count",
     ["symbol", "reason"],
 )
-BINANCE_API_ERROR_TOTAL = Counter(
+BINANCE_API_ERROR_TOTAL = _get_or_create_counter(
     "binance_api_error_total",
     "Binance API error count",
     ["endpoint", "status_code"],
 )
-APP_UPTIME_SECONDS = Gauge(
+APP_UPTIME_SECONDS = _get_or_create_gauge(
     "app_uptime_seconds",
     "Application uptime in seconds",
 )
-EXECUTION_MODE_INFO = Gauge(
+EXECUTION_MODE_INFO = _get_or_create_gauge(
     "execution_mode_info",
     "Current execution mode info gauge",
     ["mode"],

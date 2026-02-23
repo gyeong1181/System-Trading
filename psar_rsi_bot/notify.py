@@ -4,15 +4,26 @@ import asyncio
 from typing import Optional
 
 import httpx
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 
 from utils import get_app_logger
 
-TELEGRAM_SEND_TOTAL = Counter(
+
+def _get_or_create_counter(name: str, documentation: str, labelnames=()):
+    try:
+        return Counter(name, documentation, labelnames=labelnames)
+    except ValueError:
+        collector = REGISTRY._names_to_collectors.get(name)  # type: ignore[attr-defined]
+        if collector is None:
+            raise
+        return collector
+
+
+TELEGRAM_SEND_TOTAL = _get_or_create_counter(
     "telegram_send_total",
     "Total Telegram send attempts",
 )
-TELEGRAM_SEND_FAIL_TOTAL = Counter(
+TELEGRAM_SEND_FAIL_TOTAL = _get_or_create_counter(
     "telegram_send_fail_total",
     "Total Telegram send failures",
     ["reason"],
