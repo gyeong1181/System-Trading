@@ -86,6 +86,28 @@ prometheus --config.file=/path/to/prometheus.yml
 
 ---
 
+## Grafana 연동 (권장)
+모니터링 스택 파일:
+- `deploy/monitoring/docker-compose.monitoring.yml`
+- `deploy/monitoring/prometheus/prometheus.yml`
+- `deploy/monitoring/grafana/dashboards/psar-rsi-ops-overview.json`
+
+실행:
+```bash
+cd deploy/monitoring
+docker compose -f docker-compose.monitoring.yml up -d
+```
+
+접속:
+- Prometheus: `http://<server-ip>:9090`
+- Grafana: `http://<server-ip>:3000`
+- 계정: `admin / admin123!` (최초 로그인 후 비밀번호 변경 권장)
+
+세부 절차:
+- `deploy/monitoring/README.md`
+
+---
+
 ## TradingView Webhook JSON 템플릿
 ### OPEN LONG
 ```json
