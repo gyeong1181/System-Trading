@@ -312,6 +312,53 @@ def _is_timeframe_allowed(symbol: str, timeframe: str) -> bool:
     return timeframe_lower in config.allowed_timeframes
 
 
+def _format_open_message(
+    signal: WebhookSignal,
+    qty: float,
+    price: float,
+    notional: float,
+    sizing_meta: dict[str, float | str],
+) -> str:
+    symbol = signal.symbol.upper()
+    lines = [f"[OPEN] {signal.side} {symbol}", f"qty={qty:.6f}", f"entry={price:.2f}"]
+    lines.append(f"notional={notional:.2f} USDT")
+    if "equity" in sizing_meta:
+        lines.append(f"wallet={float(sizing_meta['equity']):.2f} USDT")
+    if "pct" in sizing_meta:
+        lines.append(f"alloc={float(sizing_meta['pct']) * 100:.1f}%")
+    if "target_total_leverage" in sizing_meta:
+        lines.append(f"target_lev={float(sizing_meta['target_total_leverage']):.2f}x")
+    elif config.leverage > 0:
+        lines.append(f"lev={float(config.leverage):.2f}x")
+    if "applied_leverage" in sizing_meta:
+        lines.append(f"preset_lev={float(sizing_meta['applied_leverage']):.2f}x")
+    return "\n".join(lines)
+
+
+def _infer_close_summary(
+    side: str,
+    qty: float,
+    entry_price: float,
+    exit_price: float,
+) -> tuple[str, float, float]:
+    if side == "LONG":
+        pnl_usdt = (exit_price - entry_price) * qty
+    else:
+        pnl_usdt = (entry_price - exit_price) * qty
+    pnl_pct = 0.0
+    if entry_price > 0:
+        pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0
+        if side == "SHORT":
+            pnl_pct *= -1
+    if pnl_usdt > 1e-8:
+        close_label = "TP CLOSE"
+    elif pnl_usdt < -1e-8:
+        close_label = "SL CLOSE"
+    else:
+        close_label = "CLOSE"
+    return close_label, pnl_usdt, pnl_pct
+
+
 async def _handle_open(signal: WebhookSignal):
     symbol = signal.symbol.upper()
     mode = config.order_sizing_mode
@@ -443,16 +490,7 @@ async def _handle_open(signal: WebhookSignal):
     order_resp = await executor.place_market_order(symbol, side, qty, reduce_only=False)
     _log_event("stop_skipped", symbol=symbol, reason="stop_disabled")
 
-    notify_lines = [f"[OPEN] {signal.side} {symbol}", f"qty={qty:.6f}", f"price={price:.2f}"]
-    if "equity" in sizing_meta:
-        notify_lines.append(f"wallet={float(sizing_meta['equity']):.2f}")
-    if "target_total_leverage" in sizing_meta:
-        notify_lines.append(f"target_lev={float(sizing_meta['target_total_leverage']):.2f}")
-    if "order_usdt" in sizing_meta:
-        notify_lines.append(f"target_notional={float(sizing_meta['order_usdt']):.2f}")
-    if "applied_leverage" in sizing_meta:
-        notify_lines.append(f"applied_lev={float(sizing_meta['applied_leverage']):.2f}")
-    await _notify("\n".join(notify_lines))
+    await _notify(_format_open_message(signal, qty, price, notional, sizing_meta))
 
     _log_event(
         "order_ok",
@@ -488,13 +526,46 @@ async def _handle_close(signal: WebhookSignal):
         _track_order_result("skip", symbol, "CLOSE", signal.side, "position_side_mismatch")
         return {"status": "skip", "reason": "position_side_mismatch"}
 
+    entry_price = float(position.get("entry_price", 0.0))
+    exit_price = signal.price or await _get_mark_price(symbol)
+    close_label, pnl_usdt, pnl_pct = _infer_close_summary(
+        signal.side,
+        position["amt"],
+        entry_price,
+        exit_price,
+    )
     side = "SELL" if signal.side == "LONG" else "BUY"
     _log_event("order_submit", symbol=symbol, action="CLOSE", side=side, qty=position["amt"])
     resp = await executor.place_market_order(symbol, side, position["amt"], reduce_only=True)
-    await _notify(f"[CLOSE] {signal.side} {symbol}\nqty={position['amt']:.6f}")
-    _log_event("order_ok", symbol=symbol, action="CLOSE", qty=position["amt"])
+    notify_lines = [f"[{close_label}] {signal.side} {symbol}", f"qty={position['amt']:.6f}"]
+    if entry_price > 0:
+        notify_lines.append(f"entry={entry_price:.2f}")
+    if exit_price > 0:
+        notify_lines.append(f"exit={exit_price:.2f}")
+    notify_lines.append(f"pnl={pnl_usdt:+.2f} USDT ({pnl_pct:+.2f}%)")
+    await _notify("\n".join(notify_lines))
+    _log_event(
+        "order_ok",
+        symbol=symbol,
+        action="CLOSE",
+        qty=position["amt"],
+        entry_price=entry_price,
+        exit_price=exit_price,
+        pnl_usdt=pnl_usdt,
+        pnl_pct=pnl_pct,
+        close_label=close_label,
+    )
     _track_order_result("ok", symbol, "CLOSE", signal.side)
-    return {"status": "ok", "order": resp, "qty": position["amt"]}
+    return {
+        "status": "ok",
+        "order": resp,
+        "qty": position["amt"],
+        "entry_price": entry_price,
+        "exit_price": exit_price,
+        "pnl_usdt": pnl_usdt,
+        "pnl_pct": pnl_pct,
+        "close_label": close_label,
+    }
 
 
 @app.get("/health")
