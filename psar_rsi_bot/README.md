@@ -1,4 +1,4 @@
-﻿# TradingView Webhook 기반 자동매매 Executor
+# TradingView Webhook 기반 자동매매 Executor
 
 TradingView에서 전략 신호를 계산하고, 서버는 **주문 실행기(Executor)**로만 동작하도록 전환했습니다.  
 기존 전략 복제 실패 문제를 해결하고, 운영/검증/증빙 중심의 포트폴리오로 마감합니다.
@@ -105,6 +105,18 @@ docker compose -f docker-compose.monitoring.yml up -d
 
 세부 절차:
 - `deploy/monitoring/README.md`
+
+---
+
+## 모니터링 증빙 (실제 운영)
+### Prometheus Targets (UP)
+![Prometheus Targets UP](docs/monitoring/prometheus_targets_up.jpg)
+
+### Grafana Alert Rules
+![Grafana Alert Rules](docs/monitoring/grafana_alert_rules.jpg)
+
+### Telegram Alert 수신
+![Telegram Alert Received](docs/monitoring/telegram_reception.jpg)
 
 ---
 
