@@ -1,59 +1,158 @@
-# TradingView Webhook 기반 자동매매 Executor
+﻿# Automated Trading Executor | Project README
 
-TradingView에서 전략 신호를 계산하고, 서버는 **주문 실행기(Executor)**로만 동작하도록 전환했습니다.  
-기존 전략 복제 실패 문제를 해결하고, 운영/검증/증빙 중심의 포트폴리오로 마감합니다.
+TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance Futures 주문을 실행하는 운영형 자동매매 실행기입니다.  
+전략 계산은 TradingView가 담당하고, 서버는 `수신 -> 검증 -> 중복 방지 -> 주문 실행 -> 로그/알림`에 집중합니다.
 
-## 핵심 원칙
-- 전략 계산은 TradingView에서만 수행
-- 서버는 Webhook 수신 + 주문 실행 + 기록/알림만 담당
-- BTCUSDT, SOLUSDT 1시간봉 / LONG+SHORT 지원
+## 현재 운영 상태
+- 실행 모드: `LIVE`
+- 현재 실거래 운용: `SOLUSDT 단일 운용`
+- 현재 진입 방식: `잔고 비율 기반 진입 (EQUITY_PCT)`
+- 현재 기본 레버리지: `1x`
+- 확장 가능성: 환경변수 변경만으로 `BTCUSDT`를 다시 허용해 다중 심볼 운용 가능
 
 ---
 
-## 아키텍처
+## 핵심 원칙
+- 전략 계산은 TradingView에서만 수행
+- 서버는 Webhook Executor로만 동작
+- `signal_id` 기반 중복 방지
+- 포지션 반전 시 선청산 후 재진입 가능
+- 주문 실패/스킵/예외를 로그와 텔레그램으로 추적
+
+---
+
+## 시스템 개요
 ```mermaid
 flowchart LR
     TV[TradingView Alert] --> API[FastAPI /tv/webhook]
-    API --> DB[(SQLite: signals, orders)]
-    API --> BINANCE[Binance Futures]
-    API --> CW[CloudWatch Logs]
-    API --> TG[Telegram Alert]
+    API --> VALID[Secret / Symbol / Timeframe Validation]
+    VALID --> DB[(SQLite: signals, orders)]
+    DB --> EXE[Order Executor]
+    EXE --> BINANCE[Binance Futures]
+    EXE --> CW[CloudWatch Logs]
+    EXE --> TG[Telegram Alerts]
+    EXE --> METRICS[Prometheus /metrics]
     GHA[GitHub Actions] --> API
 ```
 
-![Architecture](docs/Architecture/Architecture.png)
-![Mermaid Architecture](docs/Architecture/Mermaid_Architecture.png)
+보조 아키텍처 이미지:
+- ![Architecture](docs/Architecture/Architecture.png)
+- ![Mermaid Architecture](docs/Architecture/Mermaid_Architecture.png)
 
 ---
 
 ## 실행 모드
-- `RECEIVE_ONLY`: 수신/검증/저장/알림만
-- `DRY_RUN`: 주문 파라미터 산출만
+- `RECEIVE_ONLY`: 수신/검증/기록/알림만 수행
+- `DRY_RUN`: 주문 수량 계산만 수행
 - `LIVE`: 실제 주문 실행
 
 ---
 
-## 포지션 정책
-- 동일 심볼 중복 포지션 없음
-- 반대 포지션 존재 시: reduceOnly 청산 후 신규 진입
-- 진입 시 Stop-Market 손절 강제
+## 현재 운용 전략 메모
+- TradingView에서 신호 생성
+- 서버는 현재 `SOLUSDT`만 허용
+- 향후 `TV_ALLOWED_SYMBOLS=BTCUSDT,SOLUSDT`로 되돌리면 BTC 동시 운용 가능
+- 구조는 이미 다중 심볼을 고려해 설계되어 있음
 
 ---
 
-## 실행 방법 (복붙용)
+## 주문/리스크 처리
+- Webhook secret 검증
+- 허용 심볼/타임프레임 검증
+- `signal_id` 중복 방지 (SQLite)
+- 거래소 필터(`minNotional`, `stepSize`, `tickSize`) 기준 수량 정규화
+- 잔고 부족 시 주문 스킵 + 텔레그램 알림
+- 반대 포지션 존재 시 선청산 후 신규 진입 (`CLOSE_BEFORE_REVERSE=true`)
+
+현재 기본 리스크 설정 예시:
+- `SOL_ORDER_EQUITY_PCT=0.3` : 총 자본의 30% 진입
+- `LEVERAGE_DEFAULT=1` : 1배 기준
+- `SL_PCT_SOL=0.025` : 2.5% 손절 기준
+- `RESERVE_USDT`, `MARGIN_BUFFER` : 여유 증거금 및 안전 버퍼
+
+---
+
+## 텔레그램 알림
+주문 성공/실패/스킵/예외를 텔레그램으로 보냅니다.
+
+현재 포맷:
+- 오픈: `LONG / SHORT` 구분 포함
+- 청산: `TP CLOSE / SL CLOSE / CLOSE` 형태로 표시
+- 청산 메시지에는 `entry`, `exit`, `pnl`, `pnl%` 포함
+
+증빙:
+- ![Telegram Reception](docs/monitoring/telegram_reception.jpg)
+
+---
+
+## 모니터링
+### Prometheus
+- 엔드포인트: `GET /metrics`
+- 주요 메트릭:
+  - `webhook_received_total`
+  - `webhook_result_total`
+  - `webhook_process_seconds`
+  - `order_result_total`
+  - `order_skip_total`
+  - `binance_api_error_total`
+  - `telegram_send_total`
+  - `telegram_send_fail_total`
+
+### Grafana
+- Prometheus 타깃 상태 및 운영 알림 확인
+- 경보 룰 / Contact Point / Telegram 알림 테스트 완료
+
+증빙:
+- ![Prometheus Targets UP](docs/monitoring/prometheus_targets_up.jpg)
+- ![Grafana Alert Rules](docs/monitoring/grafana_alert_rules.jpg)
+
+---
+
+## TradingView Webhook JSON (현재 사용 형식)
+```json
+{
+  "secret": "YOUR_SECRET",
+  "strategy_id": "azzam_psar",
+  "symbol": "{{ticker}}",
+  "timeframe": "1h",
+  "order_action": "{{strategy.order.action}}",
+  "position_size": "{{strategy.position_size}}",
+  "signal_time": "{{timenow}}",
+  "signal_id": "{{timenow}}_{{ticker}}_{{strategy.order.action}}"
+}
+```
+
+서버는 위 payload를 받아 `order_action`과 `position_size`로 `OPEN/CLOSE`, `LONG/SHORT`를 해석합니다.
+
+---
+
+## 환경 변수 핵심값
+필수:
+- `TV_WEBHOOK_SECRET`
+- `EXECUTION_MODE`
+- `BINANCE_API_KEY`, `BINANCE_API_SECRET` (`LIVE`)
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+
+현재 실거래 예시:
+- `TV_ALLOWED_SYMBOLS=SOLUSDT`
+- `TV_ALLOWED_TIMEFRAMES_BY_SYMBOL=SOLUSDT:1h`
+- `ORDER_SIZING_MODE=EQUITY_PCT`
+- `SOL_ORDER_EQUITY_PCT=0.3`
+- `LEVERAGE_DEFAULT=1`
+- `SL_PCT_SOL=0.025`
+
+확장 예시:
+- `TV_ALLOWED_SYMBOLS=BTCUSDT,SOLUSDT`
+- `TV_ALLOWED_TIMEFRAMES_BY_SYMBOL=BTCUSDT:1h,SOLUSDT:1h`
+
+---
+
+## 실행 방법
 ### 로컬 실행
 ```bash
 cd psar_rsi_bot
 uvicorn webhook_server:app --host 0.0.0.0 --port 8000
 ```
-
-Webhook Endpoint:
-- `POST /tv/webhook`
-- `GET /health`
-- `GET /metrics` (Prometheus)
-
-예시 URL:
-- `http://<server-ip>:8000/tv/webhook`
 
 ### Docker 실행
 ```bash
@@ -64,140 +163,46 @@ docker compose logs -f
 
 ---
 
-## Prometheus 연동 (최소 구성)
-1. `prometheus.yml` 준비: `deploy/prometheus.yml`
-2. Prometheus 실행 예시:
-```bash
-prometheus --config.file=/path/to/prometheus.yml
-```
-3. 확인:
-- `http://<server-ip>:8000/metrics`
-- `http://<server-ip>:9090/targets`
+## 배포 및 운영
+배포 방식:
+- GitHub Actions -> SSH / `rsync` -> EC2 `/home/ec2-user/systemTrading/`
+- 이후 `psar_rsi_bot` systemd 서비스 재시작
 
-수집되는 핵심 메트릭 예시:
-- `webhook_received_total`
-- `webhook_result_total`
-- `webhook_process_seconds`
-- `order_result_total`
-- `order_skip_total`
-- `binance_api_error_total`
-- `telegram_send_total`
-- `telegram_send_fail_total`
-
----
-
-## Grafana 연동 (권장)
-모니터링 스택 파일:
-- `deploy/monitoring/docker-compose.monitoring.yml`
-- `deploy/monitoring/prometheus/prometheus.yml`
-- `deploy/monitoring/grafana/dashboards/psar-rsi-ops-overview.json`
-
-실행:
-```bash
-cd deploy/monitoring
-docker compose -f docker-compose.monitoring.yml up -d
-```
-
-접속:
-- Prometheus: `http://<server-ip>:9090`
-- Grafana: `http://<server-ip>:3000`
-- 계정: `admin / admin123!` (최초 로그인 후 비밀번호 변경 권장)
-
-세부 절차:
-- `deploy/monitoring/README.md`
-
----
-
-## 모니터링 증빙 (실제 운영)
-### Prometheus Targets (UP)
-![Prometheus Targets UP](docs/monitoring/prometheus_targets_up.jpg)
-
-### Grafana Alert Rules
-![Grafana Alert Rules](docs/monitoring/grafana_alert_rules.jpg)
-
-### Telegram Alert 수신
-![Telegram Alert Received](docs/monitoring/telegram_reception.jpg)
-
----
-
-## TradingView Webhook JSON 템플릿
-### OPEN LONG
-```json
-{
-  "secret": "YOUR_SECRET",
-  "strategy_id": "azzam_psar",
-  "symbol": "{{ticker}}",
-  "timeframe": "1h",
-  "action": "OPEN",
-  "side": "LONG",
-  "signal_time": "{{timenow}}",
-  "signal_id": "{{timenow}}_{{ticker}}_OPEN_LONG"
-}
-```
-
-### CLOSE LONG
-```json
-{
-  "secret": "YOUR_SECRET",
-  "strategy_id": "azzam_psar",
-  "symbol": "{{ticker}}",
-  "timeframe": "1h",
-  "action": "CLOSE",
-  "side": "LONG",
-  "signal_time": "{{timenow}}",
-  "signal_id": "{{timenow}}_{{ticker}}_CLOSE_LONG"
-}
-```
-
-### OPEN SHORT / CLOSE SHORT
-`side`만 `SHORT`으로 변경해 동일 형식 사용
-
----
-
-## 환경 변수 (.env)
-필수:
-- `TV_WEBHOOK_SECRET`
-- `EXECUTION_MODE` (RECEIVE_ONLY | DRY_RUN | LIVE)
-- `BINANCE_API_KEY`, `BINANCE_API_SECRET` (LIVE)
-- `BTC_ORDER_USDT`, `SOL_ORDER_USDT`
-- `SL_PCT_BTC`, `SL_PCT_SOL`
-
-선택:
-- `TV_ALLOWED_SYMBOLS`, `TV_ALLOWED_TIMEFRAMES`
-- `TV_ALLOWED_TIMEFRAMES_BY_SYMBOL` (예: `BTCUSDT:1h,SOLUSDT:1h`)
-- `LEVERAGE_DEFAULT`, `RESERVE_USDT`, `MARGIN_BUFFER`
-- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-- 주문 금액 모드:
-  - `ORDER_SIZING_MODE=FIXED` + `BTC_ORDER_USDT`, `SOL_ORDER_USDT`
-  - `ORDER_SIZING_MODE=EQUITY_PCT` + `BTC_ORDER_EQUITY_PCT`, `SOL_ORDER_EQUITY_PCT`
-  - `ORDER_SIZING_MODE=EFFECTIVE_LEVERAGE` + `TOTAL_TARGET_LEVERAGE`, `OPERATING_CAPITAL_RATIO`, `SYMBOL_WEIGHTS`, `PRESET_SYMBOL_LEVERAGE`
-
----
-
-## DB 구조
-- `data/bot.db`
-- `signals`: 수신 신호 기록 + 중복 방지
-- `orders`: 주문 요청/응답 기록
-
----
-
-## 검증 플로우
-1. RECEIVE_ONLY로 테스트 알림 3회 수신
-2. DRY_RUN으로 주문 파라미터 검증
-3. LIVE로 최소 주문 1회 성공 (증거 캡처)
-
----
-
-## 운영/배포 (systemd)
+운영 명령:
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart psar_rsi_bot
 sudo systemctl status psar_rsi_bot --no-pager
+sudo journalctl -u psar_rsi_bot -n 100 --no-pager
 ```
 
-systemd 유닛 템플릿: `deploy/psar_rsi_webhook.service`
+systemd 유닛 템플릿:
+- `deploy/psar_rsi_webhook.service`
 
 ---
 
-## 참고
-- 기존 `psar_rsi_strategy.py`는 **검증/참고용**으로 유지
+## 문제 해결 경험
+- TradingView 전략 복제 오차로 `0체결` 문제가 발생해 Webhook Executor 구조로 전환
+- Binance API `400 / 401` 오류를 키/권한/엔드포인트 문제로 분리 추적
+- 최소 주문/필터 미충족으로 인한 실패를 주문 전 검증 로직으로 차단
+- systemd 재시작 루프, 경로/권한 이슈를 정리해 상시 구동 안정화
+- Prometheus / Grafana를 붙여 메트릭 기반 운영 관측 체계 정리
+
+---
+
+## 한계와 다음 단계
+현재:
+- TradingView 신호 품질과 거래소 상태에 영향을 받음
+- 청산 메시지의 손익은 청산 시점 가격 기준 근사치
+
+다음 단계:
+- `infra/terraform/` 기반으로 인프라 코드화 고도화 또는 기존 리소스 import
+- 운영 Runbook / 장애 대응 문서 강화
+- 실거래 운영 데이터 기반 지표 정리
+
+---
+
+## 참고 자료
+- 모니터링 스택: `deploy/monitoring/`
+- 직무 타겟 문서: `docs/job_targets/`
+- 루트 포트폴리오 문서: [../README.md](../README.md)

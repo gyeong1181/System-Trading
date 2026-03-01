@@ -1,122 +1,125 @@
-﻿# TradingView Webhook Executor (운영형)
+﻿# gyeong1181 | Cloud / DevOps / Infra Portfolio
 
-TradingView에서 전략 신호를 계산하고, 서버는 **주문 실행기(Executor)**로만 동작하는 자동매매 시스템입니다.  
-AWS EC2에서 24시간 운영하며, GitHub Actions로 자동 배포/재시작합니다.
+실제로 운영되는 자동매매 실행기를 만들고, 배포와 모니터링까지 연결해 운영형 포트폴리오로 정리한 저장소입니다.  
+핵심은 전략 자체보다, `Webhook 기반 실행기`, `상시 구동`, `알림`, `로그 추적`, `CI/CD`, `운영 문서화`를 끝까지 묶어낸 점입니다.
 
-## 핵심 요약
-- **전략 계산**: TradingView Alert
-- **실행기**: FastAPI Webhook → Binance Futures
-- **운영**: EC2 systemd 상시 구동 + GitHub Actions 자동 배포
-- **관측/증빙**: CloudWatch Logs Insights, 텔레그램 알림, 배포 로그
+## 포지셔닝
+- 목표 직무: `Cloud Engineer`, `DevOps Engineer`, `Infra Engineer`
+- 강점: `실행 가능한 서비스 구축`, `운영 자동화`, `로그/알림 기반 문제 추적`
+- 현재 상태: `실거래 운영 중`, `Prometheus/Grafana 연동 완료`, `Terraform IaC 골격 추가 완료`
 
 ---
 
-## 운영 증빙 (Operations Evidence)
-운영 중 발생한 이슈를 로그/알림으로 추적하고, 배포 내역을 CI/CD로 관리합니다.
+## 핵심 프로젝트
+### Automated Trading Executor
+TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance Futures 주문을 실행하는 자동매매 실행기입니다.
 
+- 실거래 환경: AWS EC2 상시 운영
+- 실행 흐름: `TradingView -> FastAPI -> Binance Futures`
+- 운영 구성: `systemd`, `GitHub Actions`, `CloudWatch`, `Telegram`, `Prometheus`, `Grafana`
+- 상세 문서: [psar_rsi_bot/README.md](psar_rsi_bot/README.md)
+
+주요 구현:
+- Webhook secret 검증
+- `signal_id` 기반 중복 방지(SQLite)
+- 포지션 반전 시 선청산 후 재진입
+- 주문 수량 계산, 최소 주문/필터 검증
+- 텔레그램 체결/실패 알림
+- Prometheus 메트릭 수집 + Grafana 대시보드/알림
+
+---
+
+## 운영 증빙
 ### CloudWatch Logs Insights
 ![CloudWatch Logs Insights](psar_rsi_bot/docs/cloudwatch_insights2.png)
 
-### GitHub Actions 배포 로그
+### Grafana Alert Rules
+![Grafana Alert Rules](psar_rsi_bot/docs/monitoring/grafana_alert_rules.jpg)
+
+### Telegram Execution Alert
+![Telegram Reception](psar_rsi_bot/docs/monitoring/telegram_reception.jpg)
+
+### GitHub Actions CI / Deploy
 ![GitHub Actions](psar_rsi_bot/docs/Github_Actions_CICD_capture.png)
 
-### Telegram 알림
-![Telegram Alert](psar_rsi_bot/docs/telegram_alert.png)
-
-CloudWatch Logs Insights를 활용해
-실행/에러/경고 로그를 시간 범위 기준으로 필터링하며,
-실제 운영 중 발생한 Binance API 400 오류 및 스트림 오류를 추적했습니다.
-
-장애 발생 시 로그 기반으로 원인을 좁히고,
-알림(텔레그램)과 연계해 빠르게 인지할 수 있도록 구성했습니다.
-현재 시스템이 아직 완전하지 않아, **최선의 쿼리 캡처와 텔레그램 알림 캡처**를 정리해 두었습니다.
+위 증빙은 단순 코드 작성이 아니라, 실제 운영 중 발생한 이벤트를 로그와 알림으로 추적하고 배포 이력을 남기는 흐름을 보여주기 위한 캡처입니다.
 
 ---
 
-## 아키텍처
-### Mermaid (유지)
-```mermaid
-flowchart LR
-    TV[TradingView Alert] --> API[FastAPI /tv/webhook]
-    API --> DB[(SQLite: signals, orders)]
-    API --> BINANCE[Binance Futures]
-    API --> CW[CloudWatch Logs]
-    API --> TG[Telegram Alert]
-    GHA[GitHub Actions] --> API
-```
+## 기술 스택
+### Cloud / Infra
+- AWS EC2
+- IAM
+- CloudWatch Logs
+- systemd
 
-### Eraser 아키텍처 이미지
-![Architecture](psar_rsi_bot/docs/Architecture/Architecture.png)
+### Backend / Runtime
+- Python
+- FastAPI
+- SQLite
 
-### 보조 다이어그램 (Mermaid 이미지)
-![Mermaid Architecture](psar_rsi_bot/docs/Architecture/Mermaid_Architecture.png)
+### CI/CD
+- GitHub Actions
+- SSH / `rsync` 기반 배포
 
----
+### IaC
+- Terraform
 
-## 실행 방법
-### 로컬 실행
-```bash
-cd psar_rsi_bot
-uvicorn webhook_server:app --host 0.0.0.0 --port 8000
-```
+### Observability
+- Prometheus
+- Grafana
+- Telegram Alerts
 
-### Docker 실행 (선택)
-```bash
-cd psar_rsi_bot
-docker compose up -d --build
-docker compose logs -f
-```
+### External Integrations
+- TradingView Webhook
+- Binance Futures API
 
 ---
 
-## 환경변수 설정
-1) `.env.example`을 복사해 `.env` 생성
-```bash
-copy .env.example .env   # Windows
-cp .env.example .env     # Linux/Mac
-```
-2) 필수 입력
-- `TV_WEBHOOK_SECRET`
-- `EXECUTION_MODE` (RECEIVE_ONLY | DRY_RUN | LIVE)
-- `BTC_ORDER_USDT`, `SOL_ORDER_USDT`
-- `SL_PCT_BTC`, `SL_PCT_SOL`
-- 실거래: `BINANCE_API_KEY`, `BINANCE_API_SECRET`
+## 운영 방식
+- 서버 OS: `Amazon Linux 2023 (EC2)`
+- 배포 방식: `GitHub Actions -> SSH / rsync -> systemd restart`
+- systemd 서비스명: `psar_rsi_bot`
+- 실행 모드: `LIVE`
+- 현재 실거래 운용: `SOLUSDT 단일 운용`, 잔고 비율 기반 진입
+- 확장 방향: 구조상 `BTCUSDT`를 다시 허용해 다중 심볼 운용으로 확장 가능
 
-3) 보안 주의
-- `.env`는 절대 GitHub에 올리지 마세요.
+CloudWatch 로그 그룹명은 저장소 내에 명시돼 있지 않아, 실제 AWS 콘솔 기준 이름으로 추후 확정 반영하는 편이 맞습니다.
 
 ---
 
-## 배포 및 운영
-- **GitHub Actions** → EC2 `/home/ec2-user/systemTrading/`로 rsync 배포
-- **systemd**로 상시 실행
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart psar_rsi_bot
-sudo systemctl status psar_rsi_bot --no-pager
-```
+## 문제 해결 경험
+- TradingView 전략 복제 오차로 `0체결` 문제가 발생해, 전략 계산과 주문 실행을 분리한 Webhook Executor 구조로 전환
+- Binance 최소 주문/필터 오류가 발생해 수량 정규화 및 스킵/알림 로직 추가
+- `401 / 400` API 오류를 로그와 텔레그램 알림으로 추적해 키/권한/엔드포인트 이슈 분리
+- systemd 재시작 루프, 경로/권한 문제를 정리해 상시 구동 안정화
+- Prometheus / Grafana를 붙여 메트릭, 타깃 상태, 알림 흐름을 운영 기준으로 정리
 
 ---
 
-## 문제 해결 경험 (운영 중심)
-- 실시간 거래 0건 → Webhook 기반 executor로 전환
-- 주문 실패(400 Bad Request) → 최소 주문/필터 검증 로직 추가
-- 배포 실패/권한 문제 → systemd 경로/권한 정리
+## 문서 전략
+- 이 `README.md`: GitHub에서 이 저장소 메인 페이지에 바로 표시되는 문서
+- `PROFILE_README_DRAFT.md`: GitHub 프로필 전용 README 초안 (별도 프로필 저장소로 옮겨 쓰는 용도)
+- [psar_rsi_bot/README.md](psar_rsi_bot/README.md): 프로젝트 기술 문서
+- [infra/terraform/README.md](infra/terraform/README.md): Terraform IaC 가이드 및 골격
+- `psar_rsi_bot/docs/`: 아키텍처, 모니터링, 운영 증빙
 
-## Troubleshooting Highlights
-- EC2 배포 경로(`/opt/...`) 권한 문제로 서비스 실행 실패  
-  → 소유권/권한 재정의 및 systemd 실행 계정 정리로 해결
-- systemd 서비스가 재시작 루프에 빠짐  
-  → WorkingDirectory/환경변수 로딩 경로 수정 후 안정화
-- GitHub Actions 배포 단계에서 SSH/권한 이슈 발생  
-  → 배포 단계 분리 및 키/권한 정책 재정비로 해결
-- CloudWatch 로그 수집/조회 범위 혼선  
-  → 로그 그룹 분리 및 Insights/Live Tail로 관측 루틴 확립
-- 텔레그램 알림 Lambda에서 인코딩 관련 오류 발생  
-  → 이벤트 payload 처리 로직 보강으로 해결
+이 구조를 유지하면, 채용 담당자는 루트에서 빠르게 전체상을 보고, 기술 검토자는 프로젝트 README로 바로 들어가 깊게 확인할 수 있습니다.
 
 ---
 
-## 문서
-- 운영/아키텍처: `psar_rsi_bot/docs/Architecture/`
-- 직무 타겟 문서: `psar_rsi_bot/docs/job_targets/`
+## 학력 / 배경
+- 서울과학기술대학교 공과대학 기계자동차공학과 졸업
+- 정규 실무 경력은 없지만, 실제로 동작하는 자동화 시스템을 직접 구축하고 운영하면서 클라우드/DevOps 역량을 포트폴리오로 증명하는 방향으로 정리 중입니다.
+
+---
+
+## Contact
+- Email: `gyeong1181@gmail.com`
+
+---
+
+## Next Step
+- 기존 수동 생성 리소스를 Terraform으로 정리하거나 `terraform import` 진행
+- 운영 Runbook / 장애 대응 문서 보강
+- 실거래 운영 데이터 기반으로 README 지표 보강
