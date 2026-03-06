@@ -32,12 +32,13 @@ TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance 
 - Runtime: `Python`, `FastAPI`, `systemd`
 - Data: `SQLite`
 - Observability: `Prometheus`, `Grafana`, `Telegram`
+- IaC: `Terraform`
 - CI/CD: `GitHub Actions`, `SSH`, `rsync`
 - Integrations: `TradingView Webhook`, `Binance Futures API`
 
 ## Background
 - 서울과학기술대학교 공과대학 기계자동차공학과 졸업
-- 정규 실무 경력은 없지만, 실제 운영되는 자동화 시스템을 직접 설계하고 구축하며 클라우드/운영 역량을 포트폴리오로 정리하고 있습니다.
+- 정규 실무 포지션 합류 전 단계에서, 실제 운영되는 자동화 시스템을 직접 설계·구축하며 클라우드/운영 역량을 포트폴리오와 운영 증빙으로 정리하고 있습니다.
 
 ## Contact
 - Email: `gyeong1181@gmail.com`

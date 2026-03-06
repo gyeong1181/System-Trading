@@ -35,9 +35,20 @@ terraform plan
 terraform apply
 ```
 
+## 현재 상태
+- Terraform `plan` 기준 신규 리소스 7개 생성 계획 검증 완료
+- 현재 구성은 기존 수동 운영 서버를 대체하는 것이 아니라, 재현 가능한 신규 인프라를 코드로 만드는 단계
+
+## 실무에서 왜 중요한가
+- 수동으로 만들던 인프라를 코드로 재현 가능하게 만듭니다.
+- 신규 서버 구축, 장애 복구, 환경 복제 시 같은 구성을 반복 재사용할 수 있습니다.
+- 팀 단위로 인프라 변경 이력을 코드 리뷰와 Git으로 관리할 수 있습니다.
+- 운영 서버를 바꾸거나 확장할 때 콘솔 클릭 실수를 줄일 수 있습니다.
+- 테스트 환경, 스테이징, 신규 고객용 환경을 빠르게 분리 생성할 수 있습니다.
+
 ## 현재 의도
 - 기존 수동 운영 인프라를 코드로 재현 가능하게 만들기
-- 이후 Nginx, Docker Compose, CloudWatch Agent 설정까지 점진적으로 추가하기
+- 이후 Nginx, Docker Compose, CloudWatch Agent, systemd 배포 단계까지 점진적으로 추가하기
 
 ## 다음 확장
 - Route53 / 도메인
@@ -45,3 +56,4 @@ terraform apply
 - SSM Parameter Store / Secrets 연동
 - CloudWatch Agent 상세 설정
 - 기존 수동 생성 리소스 `terraform import`
+- 앱 코드 배포와 `.env` 반영 자동화

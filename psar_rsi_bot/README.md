@@ -9,6 +9,7 @@ TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance 
 - 현재 진입 방식: `잔고 비율 기반 진입 (EQUITY_PCT)`
 - 현재 기본 레버리지: `1x`
 - 확장 가능성: 환경변수 변경만으로 `BTCUSDT`를 다시 허용해 다중 심볼 운용 가능
+- 인프라 상태: Terraform `plan` 기준 신규 인프라 생성 계획 검증 완료
 
 ---
 
@@ -53,6 +54,7 @@ flowchart LR
 - 서버는 현재 `SOLUSDT`만 허용
 - 향후 `TV_ALLOWED_SYMBOLS=BTCUSDT,SOLUSDT`로 되돌리면 BTC 동시 운용 가능
 - 구조는 이미 다중 심볼을 고려해 설계되어 있음
+- 향후 멀티 계정 구조로 확장하려면 심볼 관리와 별개로 계정/키 분리가 필요함
 
 ---
 
@@ -81,7 +83,7 @@ flowchart LR
 - 청산 메시지에는 `entry`, `exit`, `pnl`, `pnl%` 포함
 
 증빙:
-- ![Telegram Reception](docs/monitoring/telegram_reception.jpg)
+- ![Telegram Trade](docs/Telegram_trade.jpg)
 
 ---
 
@@ -101,10 +103,14 @@ flowchart LR
 ### Grafana
 - Prometheus 타깃 상태 및 운영 알림 확인
 - 경보 룰 / Contact Point / Telegram 알림 테스트 완료
+- 라이브 대시보드에서 `Webhook Rate`, `Webhook Result`, `Order Result`, `Latency`, `App Uptime` 패널 정상 갱신 확인
 
 증빙:
 - ![Prometheus Targets UP](docs/monitoring/prometheus_targets_up.jpg)
 - ![Grafana Alert Rules](docs/monitoring/grafana_alert_rules.jpg)
+- ![Grafana Dashboards](docs/monitoring/Grafana_Dashboards.jpg)
+- ![AWS Console Runtime](docs/monitoring/AWS_Console.jpg)
+- ![Terraform Plan](docs/Terraform_plan_7.jpg)
 
 ---
 
@@ -176,6 +182,10 @@ sudo systemctl status psar_rsi_bot --no-pager
 sudo journalctl -u psar_rsi_bot -n 100 --no-pager
 ```
 
+운영 상태 검증:
+- 현재 운영 서버에서 `psar_rsi_bot.service`가 `active (running)` 상태임을 확인
+- `/metrics` 요청이 주기적으로 수집되는 상태를 확인
+
 systemd 유닛 템플릿:
 - `deploy/psar_rsi_webhook.service`
 
@@ -183,10 +193,13 @@ systemd 유닛 템플릿:
 
 ## 문제 해결 경험
 - TradingView 전략 복제 오차로 `0체결` 문제가 발생해 Webhook Executor 구조로 전환
-- Binance API `400 / 401` 오류를 키/권한/엔드포인트 문제로 분리 추적
-- 최소 주문/필터 미충족으로 인한 실패를 주문 전 검증 로직으로 차단
-- systemd 재시작 루프, 경로/권한 이슈를 정리해 상시 구동 안정화
+- TradingView Webhook payload와 서버 해석이 어긋나 `action=null` 상태가 발생했고, `order_action + position_size` 기준으로 `OPEN/CLOSE`, `LONG/SHORT`를 해석하도록 정리
+- Binance API `400 / 401 / 404` 오류를 키/권한 문제와 엔드포인트 문제로 분리 추적해 일반 주문과 조건부 주문 흐름을 구분
+- 최소 주문/필터 미충족으로 인한 실패를 주문 전 검증 로직(`minNotional`, `stepSize`, `tickSize`)으로 차단
+- `prometheus_client` 누락과 경로/권한 이슈로 systemd 재시작 루프가 발생했고, 의존성 설치와 서비스 재기동 검증 절차를 정리해 상시 구동 안정화
+- 외부 Webhook 미도달 상황은 보안그룹 허용 IP와 서버 리스닝 상태를 함께 확인해 네트워크 문제와 애플리케이션 문제를 분리
 - Prometheus / Grafana를 붙여 메트릭 기반 운영 관측 체계 정리
+- Terraform `plan`으로 신규 인프라 생성 계획을 코드로 검증
 
 ---
 
@@ -194,11 +207,13 @@ systemd 유닛 템플릿:
 현재:
 - TradingView 신호 품질과 거래소 상태에 영향을 받음
 - 청산 메시지의 손익은 청산 시점 가격 기준 근사치
+- Terraform은 `plan` 기준 검증까지 완료했고, 실제 `apply` 또는 기존 리소스 import는 다음 단계
 
 다음 단계:
 - `infra/terraform/` 기반으로 인프라 코드화 고도화 또는 기존 리소스 import
 - 운영 Runbook / 장애 대응 문서 강화
 - 실거래 운영 데이터 기반 지표 정리
+- 계정 분리형 멀티 계정 구조 설계
 
 ---
 

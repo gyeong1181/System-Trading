@@ -1,0 +1,33 @@
+#!/bin/sh
+
+blocked_files='
+.env
+infra/terraform/terraform.tfvars
+'
+
+staged_files="$(git diff --cached --name-only)"
+
+for blocked in $blocked_files; do
+    echo "$staged_files" | grep -qx "$blocked"
+    if [ $? -eq 0 ]; then
+        echo "ERROR: $blocked must not be committed."
+        echo "Run: git restore --staged $blocked"
+        exit 1
+    fi
+done
+
+echo "$staged_files" | grep -q '^infra/terraform/.terraform/'
+if [ $? -eq 0 ]; then
+    echo "ERROR: infra/terraform/.terraform/ must not be committed."
+    echo "Run: git restore --staged infra/terraform/.terraform/"
+    exit 1
+fi
+
+echo "$staged_files" | grep -E '\.pem$|^config\.py$|^trade_signals\.csv$|/trade_signals\.csv$|/logs/.*\.csv$' > /dev/null
+if [ $? -eq 0 ]; then
+    echo "ERROR: secret keys or generated CSV files are staged."
+    echo "Check staged files and remove them before commit."
+    exit 1
+fi
+
+exit 0

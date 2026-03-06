@@ -1,12 +1,12 @@
 ﻿# gyeong1181 | Cloud / DevOps / Infra Portfolio
 
 실제로 운영되는 자동매매 실행기를 만들고, 배포와 모니터링까지 연결해 운영형 포트폴리오로 정리한 저장소입니다.  
-핵심은 전략 자체보다, `Webhook 기반 실행기`, `상시 구동`, `알림`, `로그 추적`, `CI/CD`, `운영 문서화`를 끝까지 묶어낸 점입니다.
+핵심은 전략 자체보다, `Webhook 기반 실행기`, `상시 구동`, `알림`, `로그 추적`, `CI/CD`, `운영 문서화`, `IaC`까지 묶어낸 점입니다.
 
 ## 포지셔닝
 - 목표 직무: `Cloud Engineer`, `DevOps Engineer`, `Infra Engineer`
 - 강점: `실행 가능한 서비스 구축`, `운영 자동화`, `로그/알림 기반 문제 추적`
-- 현재 상태: `실거래 운영 중`, `Prometheus/Grafana 연동 완료`, `Terraform IaC 골격 추가 완료`
+- 현재 상태: `실거래 운영 중`, `Prometheus/Grafana 연동 완료`, `Terraform plan 검증 완료`
 
 ---
 
@@ -26,6 +26,7 @@ TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance 
 - 주문 수량 계산, 최소 주문/필터 검증
 - 텔레그램 체결/실패 알림
 - Prometheus 메트릭 수집 + Grafana 대시보드/알림
+- Terraform으로 인프라 생성 계획 검증
 
 ---
 
@@ -36,13 +37,27 @@ TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance 
 ### Grafana Alert Rules
 ![Grafana Alert Rules](psar_rsi_bot/docs/monitoring/grafana_alert_rules.jpg)
 
+### Grafana Live Dashboard
+![Grafana Dashboards](psar_rsi_bot/docs/monitoring/Grafana_Dashboards.jpg)
+
 ### Telegram Execution Alert
-![Telegram Reception](psar_rsi_bot/docs/monitoring/telegram_reception.jpg)
+![Telegram Trade](psar_rsi_bot/docs/Telegram_trade.jpg)
 
 ### GitHub Actions CI / Deploy
 ![GitHub Actions](psar_rsi_bot/docs/Github_Actions_CICD_capture.png)
 
+### Runtime / systemd Health
+![AWS Console Runtime](psar_rsi_bot/docs/monitoring/AWS_Console.jpg)
+
+### Terraform Plan Validation
+![Terraform Plan](psar_rsi_bot/docs/Terraform_plan_7.jpg)
+
 위 증빙은 단순 코드 작성이 아니라, 실제 운영 중 발생한 이벤트를 로그와 알림으로 추적하고 배포 이력을 남기는 흐름을 보여주기 위한 캡처입니다.
+
+추가 검증 완료:
+- `psar_rsi_bot.service`가 `active (running)` 상태로 상시 구동 중임을 확인
+- Grafana 대시보드에서 Webhook / Order / Latency / Uptime 패널이 실제로 갱신되는 것을 확인
+- Terraform `plan` 기준 EC2, Security Group, IAM Role, Instance Profile, Policy Attachment, Elastic IP 생성 계획(총 7개 리소스)을 검증
 
 ---
 
@@ -83,6 +98,7 @@ TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance 
 - 실행 모드: `LIVE`
 - 현재 실거래 운용: `SOLUSDT 단일 운용`, 잔고 비율 기반 진입
 - 확장 방향: 구조상 `BTCUSDT`를 다시 허용해 다중 심볼 운용으로 확장 가능
+- IaC 상태: Terraform `plan` 기준 신규 인프라 생성 계획 검증 완료
 
 CloudWatch 로그 그룹명은 저장소 내에 명시돼 있지 않아, 실제 AWS 콘솔 기준 이름으로 추후 확정 반영하는 편이 맞습니다.
 
@@ -90,10 +106,13 @@ CloudWatch 로그 그룹명은 저장소 내에 명시돼 있지 않아, 실제 
 
 ## 문제 해결 경험
 - TradingView 전략 복제 오차로 `0체결` 문제가 발생해, 전략 계산과 주문 실행을 분리한 Webhook Executor 구조로 전환
-- Binance 최소 주문/필터 오류가 발생해 수량 정규화 및 스킵/알림 로직 추가
-- `401 / 400` API 오류를 로그와 텔레그램 알림으로 추적해 키/권한/엔드포인트 이슈 분리
-- systemd 재시작 루프, 경로/권한 문제를 정리해 상시 구동 안정화
+- TradingView Webhook payload와 서버 해석이 맞지 않아 `action=null` 또는 무반응이 발생했고, `order_action + position_size` 기반 해석으로 정리해 `OPEN/CLOSE`, `LONG/SHORT` 매핑을 안정화
+- Binance 최소 주문/필터 오류가 발생해 수량 정규화, `minNotional` 검증, 주문 스킵 + 텔레그램 알림 로직 추가
+- `401 / 400 / 404` API 오류를 로그와 텔레그램 알림으로 추적해 키/권한 문제와 잘못된 엔드포인트 사용 문제를 분리하고, 일반 주문과 조건부 주문 경로를 구분
+- `prometheus_client` 누락과 경로/권한 문제로 systemd 재시작 루프가 발생했고, 의존성 반영과 서비스 재기동 검증 절차를 정리해 상시 구동 안정화
+- 외부에서 Webhook이 도달하지 않는 구간은 보안그룹/접속 IP와 서버 리스닝 상태를 함께 점검해 네트워크 문제와 애플리케이션 문제를 분리
 - Prometheus / Grafana를 붙여 메트릭, 타깃 상태, 알림 흐름을 운영 기준으로 정리
+- Terraform으로 인프라 생성 계획을 코드로 검증해 수동 운영 의존도를 낮출 준비를 마침
 
 ---
 
@@ -110,7 +129,7 @@ CloudWatch 로그 그룹명은 저장소 내에 명시돼 있지 않아, 실제 
 
 ## 학력 / 배경
 - 서울과학기술대학교 공과대학 기계자동차공학과 졸업
-- 정규 실무 경력은 없지만, 실제로 동작하는 자동화 시스템을 직접 구축하고 운영하면서 클라우드/DevOps 역량을 포트폴리오로 증명하는 방향으로 정리 중입니다.
+- 정규 실무 포지션 합류 전 단계에서, 실제로 동작하는 자동화 시스템을 직접 설계·구축·운영하며 클라우드/DevOps 역량을 포트폴리오와 운영 증빙으로 정리하고 있습니다.
 
 ---
 
@@ -122,4 +141,4 @@ CloudWatch 로그 그룹명은 저장소 내에 명시돼 있지 않아, 실제 
 ## Next Step
 - 기존 수동 생성 리소스를 Terraform으로 정리하거나 `terraform import` 진행
 - 운영 Runbook / 장애 대응 문서 보강
-- 실거래 운영 데이터 기반으로 README 지표 보강
+- 실거래 운영 데이터 기반 README 지표 보강
