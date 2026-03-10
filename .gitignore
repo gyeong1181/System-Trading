@@ -26,6 +26,7 @@ config.py
 # Terraform local state
 infra/terraform/terraform.tfvars
 infra/terraform/.terraform/
+infra/terraform/scripts/*.local.env
 *.tfstate
 *.tfstate.*
 crash.log

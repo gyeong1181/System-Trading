@@ -1,4 +1,9 @@
 locals {
+  strategy_images_ready = (var.enable_psar_container ? var.psar_rsi_image != "" : true) && var.okx_qqq_image != "" && var.okx_xau_image != ""
+  psar_rsi_image_value  = var.psar_rsi_image != "" ? var.psar_rsi_image : "REPLACE_ME_PSAR_RSI_IMAGE"
+  okx_qqq_image_value   = var.okx_qqq_image != "" ? var.okx_qqq_image : "REPLACE_ME_OKX_QQQ_IMAGE"
+  okx_xau_image_value   = var.okx_xau_image != "" ? var.okx_xau_image : "REPLACE_ME_OKX_XAU_IMAGE"
+
   common_tags = merge(
     {
       Project   = var.project_name
@@ -23,6 +28,10 @@ data "aws_subnets" "default" {
 data "aws_ssm_parameter" "al2023_ami" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
+
+data "aws_caller_identity" "current" {}
+
+data "aws_partition" "current" {}
 
 resource "aws_security_group" "this" {
   name_prefix = "${var.project_name}-"
@@ -98,6 +107,37 @@ resource "aws_iam_role_policy_attachment" "cloudwatch" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
+data "aws_iam_policy_document" "ssm_parameter_read" {
+  statement {
+    sid    = "ReadTradingParameters"
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath",
+      "ssm:DescribeParameters"
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.ssm_parameter_prefix}*"
+    ]
+  }
+
+  statement {
+    sid    = "DecryptSecureParameters"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt"
+    ]
+    resources = var.ssm_kms_key_arn != "" ? [var.ssm_kms_key_arn] : ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "ssm_parameter_read" {
+  name_prefix = "${var.project_name}-ssm-params-"
+  role        = aws_iam_role.ec2.id
+  policy      = data.aws_iam_policy_document.ssm_parameter_read.json
+}
+
 resource "aws_iam_instance_profile" "ec2" {
   name_prefix = "${var.project_name}-"
   role        = aws_iam_role.ec2.name
@@ -112,8 +152,31 @@ resource "aws_instance" "this" {
   key_name               = var.key_name
   iam_instance_profile   = aws_iam_instance_profile.ec2.name
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    project_name = var.project_name
-    app_user     = var.app_user
+    project_name          = var.project_name
+    app_user              = var.app_user
+    strategy_stack_dir    = var.strategy_stack_dir
+    deploy_strategy_stack = var.deploy_strategy_stack
+    strategy_images_ready = local.strategy_images_ready
+    strategy_compose = templatefile("${path.module}/docker-compose.strategies.yml.tftpl", {
+      enable_psar_container   = var.enable_psar_container
+      psar_rsi_image          = local.psar_rsi_image_value
+      okx_qqq_image           = local.okx_qqq_image_value
+      okx_xau_image           = local.okx_xau_image_value
+      psar_rsi_container_port = var.psar_rsi_container_port
+    })
+    strategy_service = templatefile("${path.module}/trading-strategy-stack.service.tftpl", {
+      strategy_stack_dir = var.strategy_stack_dir
+    })
+    env_sync_script = templatefile("${path.module}/sync-env-from-ssm.sh.tftpl", {
+      use_ssm_env          = var.use_ssm_env
+      ssm_parameter_prefix = var.ssm_parameter_prefix
+      aws_region           = var.aws_region
+      strategy_stack_dir   = var.strategy_stack_dir
+      app_user             = var.app_user
+    })
+    env_sync_service = templatefile("${path.module}/trading-env-sync.service.tftpl", {
+      strategy_stack_dir = var.strategy_stack_dir
+    })
   })
 
   metadata_options {

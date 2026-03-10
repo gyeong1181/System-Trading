@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+%{ if enable_psar_container ~}
+  psar_rsi:
+    image: ${psar_rsi_image}
+    container_name: psar_rsi
+    env_file:
+      - ./env/psar_rsi.env
+    restart: unless-stopped
+    ports:
+      - "8000:${psar_rsi_container_port}"
+    volumes:
+      - ./volumes/psar_rsi/logs:/app/logs
+      - ./volumes/psar_rsi/data:/app/data
+%{ endif ~}
+
+  okx_qqq:
+    image: ${okx_qqq_image}
+    container_name: okx_qqq
+    env_file:
+      - ./env/okx_qqq.env
+    restart: unless-stopped
+    volumes:
+      - ./volumes/okx_qqq/logs:/app/logs
+
+  okx_xau:
+    image: ${okx_xau_image}
+    container_name: okx_xau
+    env_file:
+      - ./env/okx_xau.env
+    restart: unless-stopped
+    volumes:
+      - ./volumes/okx_xau/logs:/app/logs

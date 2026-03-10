@@ -1,4 +1,4 @@
-aws_region         = "ap-northeast-2"
+aws_region         = "us-west-2"
 project_name       = "psar-rsi-bot"
 instance_type      = "t3.small"
 key_name           = "your-keypair-name"
@@ -14,3 +14,18 @@ extra_tags = {
   Owner = "gyeong1181"
   Env   = "prod"
 }
+
+# Multi-strategy docker stack
+strategy_stack_dir    = "/opt/trading-stack"
+deploy_strategy_stack = false
+enable_psar_container = false
+
+# SSM env management
+use_ssm_env          = true
+ssm_parameter_prefix = "/trading/prod"
+ssm_kms_key_arn      = ""
+
+# Set your actual container images before enabling deploy_strategy_stack=true
+psar_rsi_image = "ghcr.io/gyeong1181/psar-rsi-bot:latest"
+okx_qqq_image  = "exitant/autotrade-app-okx-nasdaq:latest"
+okx_xau_image  = "autotrade-app-okx-2.0-gold:latest"

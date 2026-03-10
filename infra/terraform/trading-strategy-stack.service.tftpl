@@ -1,0 +1,16 @@
+[Unit]
+Description=Trading Strategy Docker Compose Stack
+After=docker.service network-online.target trading-env-sync.service
+Requires=docker.service
+Wants=trading-env-sync.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=${strategy_stack_dir}
+ExecStart=/usr/bin/docker compose -f docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.yml down
+RemainAfterExit=yes
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

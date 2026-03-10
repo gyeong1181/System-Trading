@@ -2,15 +2,85 @@
 set -euxo pipefail
 
 dnf update -y
-dnf install -y git rsync python3 python3-pip docker
+dnf install -y git rsync python3 python3-pip docker docker-compose-plugin awscli
 
 systemctl enable --now docker
+systemctl start docker
 usermod -aG docker ${app_user}
 
 install -d -o ${app_user} -g ${app_user} /home/${app_user}/systemTrading
 install -d -o ${app_user} -g ${app_user} /home/${app_user}/systemTrading/${project_name}
 
+install -d -m 0755 ${strategy_stack_dir}
+install -d -m 0755 ${strategy_stack_dir}/env
+install -d -m 0755 ${strategy_stack_dir}/volumes/psar_rsi/logs
+install -d -m 0755 ${strategy_stack_dir}/volumes/psar_rsi/data
+install -d -m 0755 ${strategy_stack_dir}/volumes/okx_qqq/logs
+install -d -m 0755 ${strategy_stack_dir}/volumes/okx_xau/logs
+
+cat >${strategy_stack_dir}/docker-compose.yml <<'COMPOSE_EOF'
+${strategy_compose}
+COMPOSE_EOF
+
+if [ ! -f ${strategy_stack_dir}/env/psar_rsi.env ]; then
+  cat >${strategy_stack_dir}/env/psar_rsi.env <<'ENV_EOF'
+# Fill with your own values before enabling live trading.
+EXECUTION_MODE=RECEIVE_ONLY
+TV_WEBHOOK_SECRET=REPLACE_ME
+BINANCE_API_KEY=REPLACE_ME
+BINANCE_API_SECRET=REPLACE_ME
+TELEGRAM_BOT_TOKEN=REPLACE_ME
+TELEGRAM_CHAT_ID=REPLACE_ME
+ENV_EOF
+fi
+
+if [ ! -f ${strategy_stack_dir}/env/okx_qqq.env ]; then
+  cat >${strategy_stack_dir}/env/okx_qqq.env <<'ENV_EOF'
+# Vendor-provided env values for OKX QQQ strategy
+OKX_API_KEY=REPLACE_ME
+OKX_API_SECRET=REPLACE_ME
+OKX_API_PASSPHRASE=REPLACE_ME
+ENV_EOF
+fi
+
+if [ ! -f ${strategy_stack_dir}/env/okx_xau.env ]; then
+  cat >${strategy_stack_dir}/env/okx_xau.env <<'ENV_EOF'
+# Vendor-provided env values for OKX XAU strategy
+OKX_API_KEY=REPLACE_ME
+OKX_API_SECRET=REPLACE_ME
+OKX_API_PASSPHRASE=REPLACE_ME
+ENV_EOF
+fi
+
+cat >/etc/systemd/system/trading-strategy-stack.service <<'SERVICE_EOF'
+${strategy_service}
+SERVICE_EOF
+
+cat >/usr/local/bin/sync-trading-env.sh <<'SYNC_EOF'
+${env_sync_script}
+SYNC_EOF
+
+cat >/etc/systemd/system/trading-env-sync.service <<'SERVICE_EOF'
+${env_sync_service}
+SERVICE_EOF
+
+chmod +x /usr/local/bin/sync-trading-env.sh
+
+chown -R ${app_user}:${app_user} ${strategy_stack_dir}
+
+systemctl daemon-reload
+systemctl enable trading-env-sync.service
+systemctl start trading-env-sync.service
+
+if [ "${deploy_strategy_stack}" = "true" ] && [ "${strategy_images_ready}" = "true" ]; then
+  systemctl enable --now trading-strategy-stack.service
+else
+  echo "Strategy stack files were created at ${strategy_stack_dir}."
+  echo "Skip auto-start (deploy_strategy_stack=${deploy_strategy_stack}, strategy_images_ready=${strategy_images_ready})."
+fi
+
 cat >/etc/motd <<EOF
 ${project_name} bootstrap complete.
 Use GitHub Actions deploy or manual rsync into /home/${app_user}/systemTrading.
+Multi-strategy docker stack path: ${strategy_stack_dir}
 EOF

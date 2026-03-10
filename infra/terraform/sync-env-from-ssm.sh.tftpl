@@ -1,0 +1,65 @@
+#!/bin/bash
+set -euo pipefail
+
+USE_SSM_ENV="${use_ssm_env}"
+SSM_PREFIX="${ssm_parameter_prefix}"
+AWS_REGION="${aws_region}"
+STACK_DIR="${strategy_stack_dir}"
+APP_USER="${app_user}"
+
+mkdir -p "$STACK_DIR/env"
+
+if [ "$USE_SSM_ENV" != "true" ]; then
+  echo "SSM env sync disabled. Keep existing env files in $STACK_DIR/env."
+  exit 0
+fi
+
+get_param() {
+  local name="$1"
+  aws ssm get-parameter \
+    --name "$name" \
+    --with-decryption \
+    --query 'Parameter.Value' \
+    --output text \
+    --region "$AWS_REGION"
+}
+
+get_param_optional() {
+  local name="$1"
+  aws ssm get-parameter \
+    --name "$name" \
+    --with-decryption \
+    --query 'Parameter.Value' \
+    --output text \
+    --region "$AWS_REGION" 2>/dev/null || true
+}
+
+cat >"$STACK_DIR/env/psar_rsi.env" <<EOF
+EXECUTION_MODE=$(get_param "${ssm_parameter_prefix}/psar_rsi/EXECUTION_MODE")
+TV_WEBHOOK_SECRET=$(get_param "${ssm_parameter_prefix}/psar_rsi/TV_WEBHOOK_SECRET")
+BINANCE_API_KEY=$(get_param "${ssm_parameter_prefix}/psar_rsi/BINANCE_API_KEY")
+BINANCE_API_SECRET=$(get_param "${ssm_parameter_prefix}/psar_rsi/BINANCE_API_SECRET")
+TELEGRAM_BOT_TOKEN=$(get_param "${ssm_parameter_prefix}/psar_rsi/TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID=$(get_param "${ssm_parameter_prefix}/psar_rsi/TELEGRAM_CHAT_ID")
+EOF
+
+cat >"$STACK_DIR/env/okx_qqq.env" <<EOF
+OKX_API_KEY=$(get_param "${ssm_parameter_prefix}/okx_qqq/OKX_API_KEY")
+OKX_API_SECRET=$(get_param "${ssm_parameter_prefix}/okx_qqq/OKX_API_SECRET")
+OKX_API_PASSPHRASE=$(get_param "${ssm_parameter_prefix}/okx_qqq/OKX_API_PASSPHRASE")
+TELEGRAM_BOT_TOKEN=$(get_param_optional "${ssm_parameter_prefix}/okx_qqq/TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID=$(get_param_optional "${ssm_parameter_prefix}/okx_qqq/TELEGRAM_CHAT_ID")
+EOF
+
+cat >"$STACK_DIR/env/okx_xau.env" <<EOF
+OKX_API_KEY=$(get_param "${ssm_parameter_prefix}/okx_xau/OKX_API_KEY")
+OKX_API_SECRET=$(get_param "${ssm_parameter_prefix}/okx_xau/OKX_API_SECRET")
+OKX_API_PASSPHRASE=$(get_param "${ssm_parameter_prefix}/okx_xau/OKX_API_PASSPHRASE")
+TELEGRAM_BOT_TOKEN=$(get_param_optional "${ssm_parameter_prefix}/okx_xau/TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID=$(get_param_optional "${ssm_parameter_prefix}/okx_xau/TELEGRAM_CHAT_ID")
+EOF
+
+chmod 600 "$STACK_DIR/env/"*.env
+chown "$APP_USER:$APP_USER" "$STACK_DIR/env/"*.env
+
+echo "SSM env sync completed from prefix: $SSM_PREFIX"

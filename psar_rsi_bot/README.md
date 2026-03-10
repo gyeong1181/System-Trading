@@ -174,6 +174,9 @@ docker compose logs -f
 - GitHub Actions -> SSH / `rsync` -> EC2 `/home/ec2-user/systemTrading/`
 - 이후 `psar_rsi_bot` systemd 서비스 재시작
 
+운영 체크리스트(권장):
+- [operations_checklist.md](docs/operations_checklist.md)
+
 운영 명령:
 ```bash
 sudo systemctl daemon-reload

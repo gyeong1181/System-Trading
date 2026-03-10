@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region for the trading infrastructure."
   type        = string
-  default     = "ap-northeast-2"
+  default     = "us-west-2"
 }
 
 variable "project_name" {
@@ -72,6 +72,66 @@ variable "app_user" {
   description = "Linux user that owns the deployment directory."
   type        = string
   default     = "ec2-user"
+}
+
+variable "strategy_stack_dir" {
+  description = "Directory on the instance where docker-compose stack files are written."
+  type        = string
+  default     = "/opt/trading-stack"
+}
+
+variable "deploy_strategy_stack" {
+  description = "Whether to auto-start the multi-strategy docker-compose stack at boot."
+  type        = bool
+  default     = false
+}
+
+variable "psar_rsi_image" {
+  description = "Container image for your existing PSAR RSI system."
+  type        = string
+  default     = ""
+}
+
+variable "enable_psar_container" {
+  description = "Whether to run PSAR RSI as a container in the strategy stack."
+  type        = bool
+  default     = false
+}
+
+variable "okx_qqq_image" {
+  description = "External OKX QQQ strategy container image."
+  type        = string
+  default     = ""
+}
+
+variable "okx_xau_image" {
+  description = "External OKX XAU strategy container image."
+  type        = string
+  default     = ""
+}
+
+variable "psar_rsi_container_port" {
+  description = "Internal container port for the PSAR RSI webhook app."
+  type        = number
+  default     = 8000
+}
+
+variable "use_ssm_env" {
+  description = "Whether to load strategy env files from AWS SSM Parameter Store."
+  type        = bool
+  default     = true
+}
+
+variable "ssm_parameter_prefix" {
+  description = "Base SSM path for strategy secrets (example: /trading/prod)."
+  type        = string
+  default     = "/trading/prod"
+}
+
+variable "ssm_kms_key_arn" {
+  description = "Optional KMS key ARN used for SecureString decrypt. Leave empty to allow decrypt on all keys."
+  type        = string
+  default     = ""
 }
 
 variable "extra_tags" {
