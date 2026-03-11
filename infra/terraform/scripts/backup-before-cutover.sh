@@ -49,14 +49,17 @@ copy_if_exists "${STACK_ROOT}/env" "${WORK_DIR}/stack/env"
 
 # Systemd units (may require sudo depending on file perms)
 if [ -e "/etc/systemd/system/psar_rsi_bot.service" ]; then
+  mkdir -p "${WORK_DIR}/systemd"
   sudo cp -a /etc/systemd/system/psar_rsi_bot.service "${WORK_DIR}/systemd/psar_rsi_bot.service"
   echo "[backup] copied: /etc/systemd/system/psar_rsi_bot.service"
 fi
 if [ -e "/etc/systemd/system/trading-strategy-stack.service" ]; then
+  mkdir -p "${WORK_DIR}/systemd"
   sudo cp -a /etc/systemd/system/trading-strategy-stack.service "${WORK_DIR}/systemd/trading-strategy-stack.service"
   echo "[backup] copied: /etc/systemd/system/trading-strategy-stack.service"
 fi
 if [ -e "/etc/systemd/system/trading-env-sync.service" ]; then
+  mkdir -p "${WORK_DIR}/systemd"
   sudo cp -a /etc/systemd/system/trading-env-sync.service "${WORK_DIR}/systemd/trading-env-sync.service"
   echo "[backup] copied: /etc/systemd/system/trading-env-sync.service"
 fi
