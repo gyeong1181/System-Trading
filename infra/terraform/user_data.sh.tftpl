@@ -2,7 +2,7 @@
 set -euxo pipefail
 
 # Keep bootstrap resilient: install required packages, then install compose plugin with fallback.
-dnf install -y git rsync python3 python3-pip docker awscli curl
+dnf install -y git rsync python3 python3-pip docker awscli
 
 if ! dnf install -y docker-compose-plugin; then
   mkdir -p /usr/libexec/docker/cli-plugins
