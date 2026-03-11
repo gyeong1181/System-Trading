@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Base name used for resources."
   type        = string
-  default     = "psar-rsi-bot"
+  default     = "quant-fleet-core"
 }
 
 variable "instance_type" {

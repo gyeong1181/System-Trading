@@ -65,7 +65,7 @@ terraform apply
 
 PSAR 이미지 자동 빌드/푸시:
 - GitHub Actions 워크플로우: `.github/workflows/docker-psar-image.yml`
-- 기본 푸시 경로: `ghcr.io/gyeong1181/psar-rsi-bot:latest`
+- 기본 푸시 경로: `ghcr.io/gyeong1181/quant-fleet-core:latest`
 - `main` 푸시 또는 수동 실행(`workflow_dispatch`) 시 자동 빌드/푸시
 
 `deploy_strategy_stack=false`(기본)인 경우:
@@ -170,7 +170,7 @@ Terraform으로 새 인스턴스를 만들기 전, 기존 서버에서 아래 �
 
 서버에서 1회 실행:
 ```bash
-cd /home/ec2-user/systemTrading/psar_rsi_bot/infra/terraform/scripts
+cd /home/ec2-user/systemTrading/infra/terraform/scripts
 bash backup-before-cutover.sh
 ```
 

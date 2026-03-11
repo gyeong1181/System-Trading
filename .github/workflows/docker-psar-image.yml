@@ -1,4 +1,4 @@
-name: Build and Push PSAR Image (GHCR)
+name: Build and Push Quant Fleet Core Image (GHCR)
 
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/psar-rsi-bot
+          images: ghcr.io/${{ github.repository_owner }}/quant-fleet-core
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-
