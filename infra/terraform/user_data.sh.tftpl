@@ -2,13 +2,23 @@
 set -euxo pipefail
 
 # Keep bootstrap resilient: install required packages, then install compose plugin with fallback.
-dnf install -y git rsync python3 python3-pip docker awscli
+dnf install -y --allowerasing git rsync python3 python3-pip docker awscli
 
-if ! dnf install -y docker-compose-plugin; then
+if ! dnf install -y --allowerasing docker-compose-plugin; then
   mkdir -p /usr/libexec/docker/cli-plugins
   COMPOSE_VERSION="v2.27.0"
-  curl -fsSL "https://github.com/docker/compose/releases/download/$${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
-    -o /usr/libexec/docker/cli-plugins/docker-compose
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "https://github.com/docker/compose/releases/download/$${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+      -o /usr/libexec/docker/cli-plugins/docker-compose
+  else
+    python3 - <<'PY'
+import urllib.request
+url = "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64"
+dst = "/usr/libexec/docker/cli-plugins/docker-compose"
+urllib.request.urlretrieve(url, dst)
+print(f"downloaded: {dst}")
+PY
+  fi
   chmod +x /usr/libexec/docker/cli-plugins/docker-compose
 fi
 
