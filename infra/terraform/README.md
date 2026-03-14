@@ -94,6 +94,8 @@ sudo systemctl enable --now trading-strategy-stack.service
 - `/trading/prod/psar_rsi/BINANCE_API_SECRET`
 - `/trading/prod/psar_rsi/TELEGRAM_BOT_TOKEN`
 - `/trading/prod/psar_rsi/TELEGRAM_CHAT_ID`
+- `/trading/prod/registry/GHCR_USERNAME` (optional)
+- `/trading/prod/registry/GHCR_TOKEN` (optional)
 - `/trading/prod/okx_qqq/OKX_API_KEY`
 - `/trading/prod/okx_qqq/OKX_API_SECRET`
 - `/trading/prod/okx_qqq/OKX_API_PASSPHRASE`
@@ -131,6 +133,11 @@ PowerShell(Windows) 사용 시:
 cd infra/terraform
 .\scripts\bootstrap-ssm-from-file.ps1 -EnvFile ".\scripts\ssm-secrets.local.env" -AwsRegion "us-west-2" -SsmPrefix "/trading/prod"
 ```
+
+GHCR private package를 쓸 경우:
+- `GHCR_USERNAME`, `GHCR_TOKEN`를 SSM에 함께 저장
+- `trading-env-sync.service`가 실행될 때 `docker login ghcr.io`를 자동 수행
+- 가장 빠른 대안은 GitHub Container package를 `public`으로 전환하는 것
 
 ## 현재 상태
 - Terraform `plan` 기준 신규 리소스 7개 생성 계획 검증 완료

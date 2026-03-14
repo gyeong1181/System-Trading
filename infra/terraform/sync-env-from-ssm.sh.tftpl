@@ -34,6 +34,13 @@ get_param_optional() {
     --region "$AWS_REGION" 2>/dev/null || true
 }
 
+GHCR_USERNAME="$(get_param_optional "${ssm_parameter_prefix}/registry/GHCR_USERNAME")"
+GHCR_TOKEN="$(get_param_optional "${ssm_parameter_prefix}/registry/GHCR_TOKEN")"
+
+if [ -n "$GHCR_USERNAME" ] && [ -n "$GHCR_TOKEN" ]; then
+  echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+fi
+
 cat >"$STACK_DIR/env/psar_rsi.env" <<EOF
 EXECUTION_MODE=$(get_param "${ssm_parameter_prefix}/psar_rsi/EXECUTION_MODE")
 TV_WEBHOOK_SECRET=$(get_param "${ssm_parameter_prefix}/psar_rsi/TV_WEBHOOK_SECRET")

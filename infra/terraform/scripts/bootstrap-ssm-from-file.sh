@@ -52,6 +52,9 @@ put_secure() {
     --overwrite >/dev/null
 }
 
+put_secure "$SSM_PREFIX/registry/GHCR_USERNAME" "${GHCR_USERNAME:-}"
+put_secure "$SSM_PREFIX/registry/GHCR_TOKEN" "${GHCR_TOKEN:-}"
+
 put_secure "$SSM_PREFIX/psar_rsi/EXECUTION_MODE" "$PSAR_EXECUTION_MODE"
 put_secure "$SSM_PREFIX/psar_rsi/TV_WEBHOOK_SECRET" "$PSAR_TV_WEBHOOK_SECRET"
 put_secure "$SSM_PREFIX/psar_rsi/BINANCE_API_KEY" "$PSAR_BINANCE_API_KEY"

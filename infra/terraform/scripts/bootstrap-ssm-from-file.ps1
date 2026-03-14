@@ -66,6 +66,9 @@ function Get-OptionalValue {
     return ""
 }
 
+Put-SecureParam "$SsmPrefix/registry/GHCR_USERNAME" (Get-OptionalValue -Map $kv -Key "GHCR_USERNAME")
+Put-SecureParam "$SsmPrefix/registry/GHCR_TOKEN" (Get-OptionalValue -Map $kv -Key "GHCR_TOKEN")
+
 Put-SecureParam "$SsmPrefix/psar_rsi/EXECUTION_MODE" $kv["PSAR_EXECUTION_MODE"]
 Put-SecureParam "$SsmPrefix/psar_rsi/TV_WEBHOOK_SECRET" $kv["PSAR_TV_WEBHOOK_SECRET"]
 Put-SecureParam "$SsmPrefix/psar_rsi/BINANCE_API_KEY" $kv["PSAR_BINANCE_API_KEY"]
