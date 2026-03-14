@@ -91,7 +91,11 @@ systemctl enable trading-env-sync.service
 systemctl start trading-env-sync.service
 
 if [ "${deploy_strategy_stack}" = "true" ] && [ "${strategy_images_ready}" = "true" ]; then
-  systemctl enable --now trading-strategy-stack.service
+  if ! systemctl enable --now trading-strategy-stack.service; then
+    echo "WARNING: trading-strategy-stack.service failed during bootstrap. cloud-init will continue."
+    systemctl status trading-strategy-stack.service --no-pager -l || true
+    journalctl -u trading-strategy-stack.service -n 200 --no-pager || true
+  fi
 else
   echo "Strategy stack files were created at ${strategy_stack_dir}."
   echo "Skip auto-start (deploy_strategy_stack=${deploy_strategy_stack}, strategy_images_ready=${strategy_images_ready})."
