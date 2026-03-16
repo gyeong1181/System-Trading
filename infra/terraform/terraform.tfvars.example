@@ -28,4 +28,4 @@ ssm_kms_key_arn      = ""
 # Set your actual container images before enabling deploy_strategy_stack=true
 psar_rsi_image = "ghcr.io/gyeong1181/quant-fleet-core:latest"
 okx_qqq_image  = "exitant/autotrade-app-okx-nasdaq:latest"
-okx_xau_image  = "autotrade-app-okx-2.0-gold:latest"
+okx_xau_image  = "exitant/autotrade-app-okx-2.0-gold:latest"
