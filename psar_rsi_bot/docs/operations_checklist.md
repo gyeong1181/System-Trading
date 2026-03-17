@@ -1,100 +1,151 @@
-# Operations Checklist (Post-Deploy / Post-Change)
+# Operations Checklist
 
-배포 직후 또는 설정 변경 직후 매번 같은 순서로 점검하기 위한 Runbook입니다.  
-기본 원칙은 `코드 반영 -> 서비스 상태 -> 애플리케이션 상태 -> 모니터링 상태 -> 웹훅 경로` 순서입니다.
+이 문서는 현재 프로젝트의 운영 경로를 두 갈래로 나눠 정리한다.
 
-## 0) 작업 디렉터리
+- `서울`: 포트폴리오용 PSAR 운영 시스템
+- `오리건`: Terraform 기반 외부 OKX 전략 멀티 컨테이너 서버
+
+---
+
+## 1. 로컬 사전 점검
+
+로컬 PowerShell:
+
+```powershell
+cd "D:\코딩\자동매매\AI 자동매매 제작 프로젝트"
+git status --short
+```
+
+변경사항이 있으면:
+
+```powershell
+git add .
+git commit -m "describe change"
+git push origin main
+```
+
+GitHub Actions 완료 후 서버를 만지는 편이 안전하다.
+
+---
+
+## 2. 오리건 Terraform 서버 점검
+
+로컬 PowerShell:
+
+```powershell
+cd "D:\코딩\자동매매\AI 자동매매 제작 프로젝트\infra\terraform"
+terraform output -raw public_ip
+```
+
+SSH timeout이면 현재 공인 IP를 다시 반영:
+
+```powershell
+$MYIP = (Invoke-RestMethod "https://checkip.amazonaws.com").Trim()
+notepad .\terraform.tfvars
+terraform plan -out tfplan
+terraform apply tfplan
+```
+
+접속:
+
+```powershell
+$IP = terraform output -raw public_ip
+ssh-keygen -R $IP
+ssh -i "$env:USERPROFILE\sshkeys\key_oregon.pem" ec2-user@$IP
+```
+
+---
+
+## 3. 오리건 런타임 점검
+
+오리건 EC2:
+
+```bash
+sudo cloud-init status --wait
+sudo systemctl status trading-env-sync.service --no-pager -l
+cd /opt/trading-stack
+sudo docker compose ps
+sudo docker compose logs --tail 100
+```
+
+이미지 개별 검증:
+
+```bash
+sudo docker pull exitant/autotrade-app-okx-nasdaq:latest
+sudo docker pull exitant/autotrade-app-okx-2.0-gold:latest
+```
+
+GHCR private pull이 필요하면:
+
+```bash
+echo 'REAL_GHCR_PAT' | sudo docker login ghcr.io -u gyeong1181 --password-stdin
+sudo docker pull ghcr.io/gyeong1181/quant-fleet-core:latest
+```
+
+---
+
+## 4. SSM 비밀값 반영
+
+로컬 PowerShell에서 `infra/terraform/scripts/ssm-secrets.local.env` 수정 후:
+
+```powershell
+cd "D:\코딩\자동매매\AI 자동매매 제작 프로젝트\infra\terraform"
+.\scripts\bootstrap-ssm-from-file.ps1 -EnvFile ".\scripts\ssm-secrets.local.env" -AwsRegion "us-west-2" -SsmPrefix "/trading/prod"
+```
+
+오리건 EC2:
+
+```bash
+sudo systemctl restart trading-env-sync.service
+cd /opt/trading-stack
+sudo docker compose up -d --force-recreate
+```
+
+---
+
+## 5. 서울 포트폴리오 서버 점검
+
+서울 EC2:
+
 ```bash
 cd /home/ec2-user/systemTrading/psar_rsi_bot
-```
-
-## 1) 코드/의존성 반영
-```bash
-git pull origin main
-pip install -r requirements.txt
-```
-
-주의:
-- `requirements.txt` 변경이 없으면 `pip install`은 생략 가능
-- `.env` 변경이 있었다면 서비스 재시작은 필수
-
-## 2) 서비스 재시작
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart psar_rsi_bot
-```
-
-## 3) 서비스 상태 확인 (필수)
-```bash
 sudo systemctl status psar_rsi_bot --no-pager -l
 sudo journalctl -u psar_rsi_bot -n 100 --no-pager
-```
-
-정상 기준:
-- `Active: active (running)`
-- Traceback / ModuleNotFoundError / ImportError 없음
-
-## 4) 앱 헬스 확인 (필수)
-```bash
 curl -s http://127.0.0.1:8000/health
 curl -s http://127.0.0.1:8000/metrics | head
 ```
 
-정상 기준:
-- `/health` 응답 JSON 반환
-- `/metrics`에 Prometheus 포맷 텍스트 출력
+Webhook 도달 확인:
 
-## 5) Prometheus 연동 확인 (모니터링 사용 시)
 ```bash
-curl -s http://127.0.0.1:9090/api/v1/targets | grep -E '"health"|"lastError"' -n
+sudo journalctl -u psar_rsi_bot -f
 ```
 
-정상 기준:
-- 대상 `health`가 `up`
-- `lastError`가 빈 문자열
+서울 서버를 다시 살릴 때는 별도 문서 참조:
+- [seoul_portfolio_recovery_checklist.md](seoul_portfolio_recovery_checklist.md)
 
-## 6) Nginx/Webhook 경로 확인 (문제 발생 시)
+---
+
+## 6. Grafana / Prometheus
+
+서울 포트폴리오 서버 기준:
+
 ```bash
-sudo tail -n 50 /var/log/nginx/access.log | grep /tv/webhook
-sudo tail -n 50 /var/log/nginx/error.log
+cd /home/ec2-user/systemTrading/psar_rsi_bot/deploy/monitoring
+docker compose -f docker-compose.monitoring.yml up -d
+docker ps | grep -E "grafana|prometheus"
+curl -s http://127.0.0.1:9090/-/healthy
+curl -s http://127.0.0.1:3000/api/health
+curl -s http://127.0.0.1:9090/api/v1/targets
 ```
 
-사용 목적:
-- TradingView 또는 수동 테스트 요청이 서버까지 도달했는지 확인
-- 리버스 프록시/라우팅 문제 분리
+---
 
-## 7) 실운용 설정 확인 (중요)
-```bash
-sudo grep -E "EXECUTION_MODE|TV_ALLOWED_SYMBOLS|ORDER_SIZING_MODE|SOL_ORDER_EQUITY_PCT|BTC_ORDER_EQUITY_PCT|LEVERAGE_DEFAULT" /etc/psar_rsi_bot/.env
-```
+## 7. 빠른 장애 분리 기준
 
-확인 포인트:
-- 의도한 모드(`LIVE`/`RECEIVE_ONLY`)인지
-- 허용 심볼이 현재 전략과 일치하는지
-- 포지션 사이징 설정이 의도와 일치하는지
-
-## 8) 최종 운영 체크
-- 텔레그램 테스트 알림 1회
-- `webhook_received`, `order_ok/order_fail/order_skip` 로그 확인
-- 변경사항과 점검 결과를 데일리 리포트에 기록
-
-## 9) 다중 컨테이너 스택 점검 (사용 시)
-```bash
-sudo systemctl status trading-env-sync.service --no-pager -l
-sudo systemctl status trading-strategy-stack.service --no-pager -l
-cd /opt/trading-stack
-docker compose ps
-docker compose logs --tail 100
-```
-
-SSM 키 변경 후 반영:
-```bash
-sudo systemctl restart trading-env-sync.service
-sudo systemctl restart trading-strategy-stack.service
-```
-
-## 장애 시 빠른 분기
-- `health` 실패: 앱 프로세스/의존성/환경변수 우선 확인
-- `targets down`: Prometheus scrape 대상 주소/포트 확인
-- Webhook 미도달: 보안그룹/Nginx/access.log 순서로 확인
-- 주문 실패 급증: Binance API 응답 코드(400/401/404) 분류 후 원인 분리
+- `ssh timeout`: 보안그룹의 현재 IP 허용 범위 확인
+- `GHCR unauthorized`: 토큰 또는 package visibility 확인
+- `docker compose pull` 전체 실패: 이미지별 `docker pull`로 분리
+- `rejected_secret`: TradingView secret과 서버 env 불일치
+- `451 from Binance Futures`: 코드 문제가 아니라 리전/거래소 제약
+- `Grafana/Prometheus down`: 컨테이너, 포트, target 상태를 분리해서 확인

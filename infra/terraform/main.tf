@@ -1,5 +1,9 @@
 locals {
-  strategy_images_ready = (var.enable_psar_container ? var.psar_rsi_image != "" : true) && var.okx_qqq_image != "" && var.okx_xau_image != ""
+  strategy_images_ready = (
+    (var.enable_psar_container ? var.psar_rsi_image != "" : true) &&
+    (var.enable_okx_qqq_container ? var.okx_qqq_image != "" : true) &&
+    (var.enable_okx_xau_container ? var.okx_xau_image != "" : true)
+  )
   psar_rsi_image_value  = var.psar_rsi_image != "" ? var.psar_rsi_image : "REPLACE_ME_PSAR_RSI_IMAGE"
   okx_qqq_image_value   = var.okx_qqq_image != "" ? var.okx_qqq_image : "REPLACE_ME_OKX_QQQ_IMAGE"
   okx_xau_image_value   = var.okx_xau_image != "" ? var.okx_xau_image : "REPLACE_ME_OKX_XAU_IMAGE"
@@ -159,6 +163,8 @@ resource "aws_instance" "this" {
     strategy_images_ready = local.strategy_images_ready
     strategy_compose = templatefile("${path.module}/docker-compose.strategies.yml.tftpl", {
       enable_psar_container   = var.enable_psar_container
+      enable_okx_qqq_container = var.enable_okx_qqq_container
+      enable_okx_xau_container = var.enable_okx_xau_container
       psar_rsi_image          = local.psar_rsi_image_value
       okx_qqq_image           = local.okx_qqq_image_value
       okx_xau_image           = local.okx_xau_image_value

@@ -18,6 +18,8 @@
 - `outputs.tf`: 출력값
 - `user_data.sh.tftpl`: 초기 서버 부트스트랩
 - `terraform.tfvars.example`: 예시 변수 파일
+- `terraform.seoul-portfolio.tfvars.example`: 서울 포트폴리오 서버 예시
+- `terraform.oregon-okx.tfvars.example`: 오리건 OKX 멀티 컨테이너 서버 예시
 
 ## 시작 방법
 1. 예시 파일 복사
@@ -41,6 +43,10 @@ cp terraform.tfvars.example terraform.tfvars
   - `ssm_parameter_prefix`
   - `ssm_kms_key_arn` (선택)
 
+권장 역할 분리:
+- 서울 포트폴리오 서버: `terraform.seoul-portfolio.tfvars.example`
+- 오리건 OKX 서버: `terraform.oregon-okx.tfvars.example`
+
 3. 실행
 ```bash
 terraform init
@@ -60,8 +66,9 @@ terraform apply
 - 인스턴스 부팅 직후 `docker compose up -d` 자동 실행
 
 필수 이미지 규칙:
-- `enable_psar_container=false`(기본): `okx_qqq_image`, `okx_xau_image`만 필요
-- `enable_psar_container=true`: `psar_rsi_image`까지 포함 3개 모두 필요
+- `enable_psar_container=true`일 때만 `psar_rsi_image` 필요
+- `enable_okx_qqq_container=true`일 때만 `okx_qqq_image` 필요
+- `enable_okx_xau_container=true`일 때만 `okx_xau_image` 필요
 
 PSAR 이미지 자동 빌드/푸시:
 - GitHub Actions 워크플로우: `.github/workflows/docker-psar-image.yml`
@@ -80,7 +87,7 @@ sudo systemctl enable --now trading-strategy-stack.service
 ```
 
 주의:
-- 기존 `psar_rsi_bot`가 systemd로 `8000` 포트를 사용 중이면, `psar_rsi` 컨테이너의 `8000:8000` 포트 매핑과 충돌할 수 있습니다.
+- 기존 `psar_rsi_bot`가 systemd로 `8000` 포트를 사용 중이면, `psar_rsi` 컨테이너의 호스트 포트 매핑과 충돌할 수 있습니다.
 - 이 경우 둘 중 하나를 선택해야 합니다.
   - 기존 systemd 기반 실행 유지 (컨테이너의 8000 포트 매핑 제거)
   - PSAR도 컨테이너로 전환 (기존 systemd 서비스 중지)

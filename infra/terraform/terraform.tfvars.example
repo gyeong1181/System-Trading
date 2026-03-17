@@ -19,6 +19,8 @@ extra_tags = {
 strategy_stack_dir    = "/opt/trading-stack"
 deploy_strategy_stack = false
 enable_psar_container = false
+enable_okx_qqq_container = true
+enable_okx_xau_container = true
 
 # SSM env management
 use_ssm_env          = true

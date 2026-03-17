@@ -1,0 +1,31 @@
+aws_region         = "us-west-2"
+project_name       = "quant-fleet-oregon-okx"
+instance_type      = "t3.small"
+key_name           = "your-oregon-keypair"
+ssh_allowed_cidrs  = ["YOUR_PUBLIC_IP/32"]
+http_allowed_cidrs = ["0.0.0.0/0"]
+
+enable_monitoring_ports = false
+monitoring_allowed_cidrs = [
+  "YOUR_PUBLIC_IP/32"
+]
+
+extra_tags = {
+  Owner = "gyeong1181"
+  Env   = "prod"
+  Role  = "oregon-okx"
+}
+
+strategy_stack_dir          = "/opt/trading-stack"
+deploy_strategy_stack       = false
+enable_psar_container       = false
+enable_okx_qqq_container    = true
+enable_okx_xau_container    = true
+
+use_ssm_env          = true
+ssm_parameter_prefix = "/trading/oregon-okx"
+ssm_kms_key_arn      = ""
+
+psar_rsi_image = ""
+okx_qqq_image  = "exitant/autotrade-app-okx-nasdaq:latest"
+okx_xau_image  = "exitant/autotrade-app-okx-2.0-gold:latest"

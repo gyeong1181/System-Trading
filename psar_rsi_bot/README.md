@@ -1,28 +1,44 @@
-﻿# Automated Trading Executor | Project README
+# Portfolio PSAR Executor | Project README
 
-TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance Futures 주문을 실행하는 운영형 자동매매 실행기입니다.  
-전략 계산은 TradingView가 담당하고, 서버는 `수신 -> 검증 -> 중복 방지 -> 주문 실행 -> 로그/알림`에 집중합니다.
-
-## 현재 운영 상태
-- 실행 모드: `LIVE`
-- 현재 실거래 운용: `SOLUSDT 단일 운용`
-- 현재 진입 방식: `잔고 비율 기반 진입 (EQUITY_PCT)`
-- 현재 기본 레버리지: `1x`
-- 확장 가능성: 환경변수 변경만으로 `BTCUSDT`를 다시 허용해 다중 심볼 운용 가능
-- 인프라 상태: Terraform `plan` 기준 신규 인프라 생성 계획 검증 완료
+이 프로젝트는 TradingView Webhook을 받아 주문을 실행하는 자동 주문 실행기입니다.  
+현재 이 전략 자체를 핵심 수익 전략으로 과장하지 않고, **운영 가능한 자동화 시스템을 구축·배포·관측·분리 운영한 포트폴리오 자산**으로 정리하고 있습니다.
 
 ---
 
-## 핵심 원칙
-- 전략 계산은 TradingView에서만 수행
-- 서버는 Webhook Executor로만 동작
-- `signal_id` 기반 중복 방지
-- 포지션 반전 시 선청산 후 재진입 가능
-- 주문 실패/스킵/예외를 로그와 텔레그램으로 추적
+## 프로젝트 목적 재정의
+
+현재 이 프로젝트의 목적은 다음과 같습니다.
+
+- Webhook 기반 자동 주문 실행기 구축
+- AWS EC2 / systemd / CI/CD 기반 운영 경험 축적
+- Grafana / Prometheus / Telegram / CloudWatch 기반 관측 체계 정리
+- Terraform을 이용한 신규 리전 인프라 생성 경험 확보
+- 리전/거래소 제약을 실제로 확인하고 운영 구조를 재설계한 경험 정리
+
+즉, 이 프로젝트는 "수익률 과시용 전략"보다 **운영형 시스템 구축 경험**을 보여주는 용도에 가깝습니다.
+
+---
+
+## 현재 역할
+
+이 PSAR 시스템은 **서울 리전 포트폴리오 서버**에서 운영하는 것이 기준입니다.
+
+### Seoul Region에서의 역할
+- 내가 만든 전략용 서버
+- Webhook Executor 운영
+- Binance Futures 연동
+- Grafana / Prometheus / CloudWatch / Telegram / CI/CD 증빙
+- 포트폴리오용 운영 시스템
+
+### Oregon Region과의 관계
+- Oregon은 외부 vendor 전략(OKX) 멀티 컨테이너 전용으로 분리
+- PSAR는 Oregon에서 Binance Futures 제약(`451`)을 확인했으므로 기본 배치 대상에서 제외
+- 멀티 컨테이너 운영 자체는 실제로 시도했으나, 외부 vendor 컨테이너는 Render 중심 운영 흐름에 더 맞는 부분이 있어 장기 운영 대상에서는 제외 가능성을 열어둠
 
 ---
 
 ## 시스템 개요
+
 ```mermaid
 flowchart LR
     TV[TradingView Alert] --> API[FastAPI /tv/webhook]
@@ -36,61 +52,44 @@ flowchart LR
     GHA[GitHub Actions] --> API
 ```
 
-보조 아키텍처 이미지:
+보조 이미지:
 - ![Architecture](docs/Architecture/Architecture.png)
 - ![Mermaid Architecture](docs/Architecture/Mermaid_Architecture.png)
 
 ---
 
-## 실행 모드
-- `RECEIVE_ONLY`: 수신/검증/기록/알림만 수행
-- `DRY_RUN`: 주문 수량 계산만 수행
-- `LIVE`: 실제 주문 실행
+## 핵심 기능
 
----
-
-## 현재 운용 전략 메모
-- TradingView에서 신호 생성
-- 서버는 현재 `SOLUSDT`만 허용
-- 향후 `TV_ALLOWED_SYMBOLS=BTCUSDT,SOLUSDT`로 되돌리면 BTC 동시 운용 가능
-- 구조는 이미 다중 심볼을 고려해 설계되어 있음
-- 향후 멀티 계정 구조로 확장하려면 심볼 관리와 별개로 계정/키 분리가 필요함
-
----
-
-## 주문/리스크 처리
 - Webhook secret 검증
-- 허용 심볼/타임프레임 검증
-- `signal_id` 중복 방지 (SQLite)
-- 거래소 필터(`minNotional`, `stepSize`, `tickSize`) 기준 수량 정규화
-- 잔고 부족 시 주문 스킵 + 텔레그램 알림
-- 반대 포지션 존재 시 선청산 후 신규 진입 (`CLOSE_BEFORE_REVERSE=true`)
-
-현재 기본 리스크 설정 예시:
-- `SOL_ORDER_EQUITY_PCT=0.3` : 총 자본의 30% 진입
-- `LEVERAGE_DEFAULT=1` : 1배 기준
-- `SL_PCT_SOL=0.025` : 2.5% 손절 기준
-- `RESERVE_USDT`, `MARGIN_BUFFER` : 여유 증거금 및 안전 버퍼
+- 허용 심볼 / 허용 타임프레임 검증
+- `signal_id` 기반 중복 방지
+- Binance 필터(`minNotional`, `stepSize`, `tickSize`) 기준 수량 정규화
+- 잔고 부족 / 주문 스킵 / 예외를 Telegram과 로그로 기록
+- `/metrics` 엔드포인트를 통한 Prometheus 수집
+- Grafana 대시보드 / 경보 룰 운영
 
 ---
 
-## 텔레그램 알림
-주문 성공/실패/스킵/예외를 텔레그램으로 보냅니다.
+## 현재 운용 기준
 
-현재 포맷:
-- 오픈: `LONG / SHORT` 구분 포함
-- 청산: `TP CLOSE / SL CLOSE / CLOSE` 형태로 표시
-- 청산 메시지에는 `entry`, `exit`, `pnl`, `pnl%` 포함
+- 실행 모드: `LIVE`
+- 현재 주 심볼: `SOLUSDT`
+- 주문 사이징: `EQUITY_PCT`
+- 레버리지: `1x`
+- 목적: 전략 수익 극대화보다 운영 시스템 검증
 
-증빙:
-- ![Telegram Trade](docs/Telegram_trade.jpg)
+확장성:
+- 환경변수 변경만으로 `BTCUSDT` 재허용 가능
+- 구조상 다중 심볼로 확장 가능
+- 다만 현재는 운영 단순성과 포트폴리오 설명력을 우선해 단일 심볼 기준으로 정리
 
 ---
 
-## 모니터링
+## 모니터링 및 운영 증빙
+
 ### Prometheus
 - 엔드포인트: `GET /metrics`
-- 주요 메트릭:
+- 대표 메트릭:
   - `webhook_received_total`
   - `webhook_result_total`
   - `webhook_process_seconds`
@@ -98,129 +97,95 @@ flowchart LR
   - `order_skip_total`
   - `binance_api_error_total`
   - `telegram_send_total`
-  - `telegram_send_fail_total`
 
 ### Grafana
-- Prometheus 타깃 상태 및 운영 알림 확인
-- 경보 룰 / Contact Point / Telegram 알림 테스트 완료
-- 라이브 대시보드에서 `Webhook Rate`, `Webhook Result`, `Order Result`, `Latency`, `App Uptime` 패널 정상 갱신 확인
+- Alert rule 구성
+- Telegram contact point 테스트
+- Webhook / Order / Latency / Uptime 시각화
 
 증빙:
 - ![Prometheus Targets UP](docs/monitoring/prometheus_targets_up.jpg)
 - ![Grafana Alert Rules](docs/monitoring/grafana_alert_rules.jpg)
 - ![Grafana Dashboards](docs/monitoring/Grafana_Dashboards.jpg)
 - ![AWS Console Runtime](docs/monitoring/AWS_Console.jpg)
-- ![Terraform Plan](docs/Terraform_plan_7.jpg)
+- ![Telegram Trade](docs/Telegram_trade.jpg)
 
 ---
 
-## TradingView Webhook JSON (현재 사용 형식)
-```json
-{
-  "secret": "YOUR_SECRET",
-  "strategy_id": "azzam_psar",
-  "symbol": "{{ticker}}",
-  "timeframe": "1h",
-  "order_action": "{{strategy.order.action}}",
-  "position_size": "{{strategy.position_size}}",
-  "signal_time": "{{timenow}}",
-  "signal_id": "{{timenow}}_{{ticker}}_{{strategy.order.action}}"
-}
-```
+## 배포 및 운영 방식
 
-서버는 위 payload를 받아 `order_action`과 `position_size`로 `OPEN/CLOSE`, `LONG/SHORT`를 해석합니다.
+### Seoul Legacy
+- `GitHub Actions -> SSH / rsync -> systemd restart`
+- 서비스명: `psar_rsi_bot`
+- 경로: `/home/ec2-user/systemTrading/psar_rsi_bot`
 
----
+### Terraform / Docker 실험 경로
+- `/opt/trading-stack` 기준 multi-container compose stack 생성 가능
+- 단, 이 경로는 현재 PSAR 실전 배치보다 **운영 구조 검증 및 리전 분리 경험** 측면에서 의미가 큼
 
-## 환경 변수 핵심값
-필수:
-- `TV_WEBHOOK_SECRET`
-- `EXECUTION_MODE`
-- `BINANCE_API_KEY`, `BINANCE_API_SECRET` (`LIVE`)
-- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-
-현재 실거래 예시:
-- `TV_ALLOWED_SYMBOLS=SOLUSDT`
-- `TV_ALLOWED_TIMEFRAMES_BY_SYMBOL=SOLUSDT:1h`
-- `ORDER_SIZING_MODE=EQUITY_PCT`
-- `SOL_ORDER_EQUITY_PCT=0.3`
-- `LEVERAGE_DEFAULT=1`
-- `SL_PCT_SOL=0.025`
-
-확장 예시:
-- `TV_ALLOWED_SYMBOLS=BTCUSDT,SOLUSDT`
-- `TV_ALLOWED_TIMEFRAMES_BY_SYMBOL=BTCUSDT:1h,SOLUSDT:1h`
-
----
-
-## 실행 방법
-### 로컬 실행
-```bash
-cd psar_rsi_bot
-uvicorn webhook_server:app --host 0.0.0.0 --port 8000
-```
-
-### Docker 실행
-```bash
-cd psar_rsi_bot
-docker compose up -d --build
-docker compose logs -f
-```
-
----
-
-## 배포 및 운영
-배포 방식:
-- GitHub Actions -> SSH / `rsync` -> EC2 `/home/ec2-user/systemTrading/`
-- 이후 `psar_rsi_bot` systemd 서비스 재시작
-
-운영 체크리스트(권장):
+운영 체크 문서:
 - [operations_checklist.md](docs/operations_checklist.md)
+- [seoul_portfolio_recovery_checklist.md](docs/seoul_portfolio_recovery_checklist.md)
 
-운영 명령:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart psar_rsi_bot
-sudo systemctl status psar_rsi_bot --no-pager
-sudo journalctl -u psar_rsi_bot -n 100 --no-pager
-```
+---
 
-운영 상태 검증:
-- 현재 운영 서버에서 `psar_rsi_bot.service`가 `active (running)` 상태임을 확인
-- `/metrics` 요청이 주기적으로 수집되는 상태를 확인
+## 거래소 / 리전 제약을 반영한 현재 판단
 
-systemd 유닛 템플릿:
-- `deploy/psar_rsi_webhook.service`
+이 프로젝트에서 중요한 기술적 판단은 다음입니다.
+
+- Oregon 리전에서 Terraform 기반 멀티 컨테이너 구조를 실제로 검증
+- 그러나 Binance Futures 접근 시 `451` 제약을 확인
+- 따라서 PSAR 시스템은 Oregon의 주 운영 대상이 아니라는 결론 도출
+- 결과적으로:
+  - `Seoul = PSAR 포트폴리오 운영 시스템`
+  - `Oregon = 외부 OKX 전략 멀티 컨테이너`
+
+추가 판단:
+- 외부 vendor 전략 2종도 Oregon에서 멀티 컨테이너로 실제 구동을 시도했다
+- 다만 운영 과정에서 해당 컨테이너가 Render 환경 기준으로 더 안정적으로 설계된 정황을 확인했다
+- 따라서 "이전 자체를 못 했다"가 아니라, "이전과 멀티 컨테이너 운영을 시도했고, 운영 적합성을 검토한 뒤 유지 여부를 다시 판단했다"는 흐름으로 정리하는 것이 맞다
+
+이 판단은 "일단 다 올리고 본다"가 아니라, **실제 제약을 확인한 뒤 워크로드를 분리한 운영 결정**이라는 점에서 의미가 있습니다.
+
+---
+
+## 비용 관점
+
+과거에는 Render에서 전략 컨테이너를 각각 분산 운영하며 월 약 21,000원 수준의 비용이 발생했습니다.
+
+이후:
+- 외부 전략 2개를 AWS 단일 인스턴스에 통합하는 방향을 검토
+- 멀티 컨테이너 운영으로 고정비 절감 시도
+- 동시에 거래소/리전 적합성을 다시 검토
+
+결과적으로:
+- 비용 절감 시도는 실제로 수행
+- 그러나 Binance 리전 제약까지 고려해 최종 구조는 단순 통합이 아니라 **역할 분리형 구조**로 재조정
 
 ---
 
 ## 문제 해결 경험
-- TradingView 전략 복제 오차로 `0체결` 문제가 발생해 Webhook Executor 구조로 전환
-- TradingView Webhook payload와 서버 해석이 어긋나 `action=null` 상태가 발생했고, `order_action + position_size` 기준으로 `OPEN/CLOSE`, `LONG/SHORT`를 해석하도록 정리
-- Binance API `400 / 401 / 404` 오류를 키/권한 문제와 엔드포인트 문제로 분리 추적해 일반 주문과 조건부 주문 흐름을 구분
-- 최소 주문/필터 미충족으로 인한 실패를 주문 전 검증 로직(`minNotional`, `stepSize`, `tickSize`)으로 차단
-- `prometheus_client` 누락과 경로/권한 이슈로 systemd 재시작 루프가 발생했고, 의존성 설치와 서비스 재기동 검증 절차를 정리해 상시 구동 안정화
-- 외부 Webhook 미도달 상황은 보안그룹 허용 IP와 서버 리스닝 상태를 함께 확인해 네트워크 문제와 애플리케이션 문제를 분리
-- Prometheus / Grafana를 붙여 메트릭 기반 운영 관측 체계 정리
-- Terraform `plan`으로 신규 인프라 생성 계획을 코드로 검증
+
+- TradingView 전략 복제 오차로 `0체결` 문제가 발생해 Webhook Executor 구조로 분리
+- TradingView payload 해석 문제를 `order_action + position_size` 기준으로 정리
+- 주문 필터 미충족 문제를 사전 검증 로직으로 차단
+- 보안그룹, 포트 매핑, 경로, 리스닝 상태를 나눠 네트워크 문제와 앱 문제를 분리
+- Prometheus / Grafana를 붙여 운영 관측 체계를 정리
+- Terraform `apply` 이후 cloud-init, SSM sync, GHCR private image pull, compose startup 병목을 실제로 추적
+- Oregon에서 Binance Futures `451`를 확인하고, 시스템 배치 목적을 다시 정의
 
 ---
 
 ## 한계와 다음 단계
-현재:
+
+현재 한계:
+- 전략 자체의 수익성은 이 프로젝트의 핵심 메시지가 아님
 - TradingView 신호 품질과 거래소 상태에 영향을 받음
-- 청산 메시지의 손익은 청산 시점 가격 기준 근사치
-- Terraform은 `plan` 기준 검증까지 완료했고, 실제 `apply` 또는 기존 리소스 import는 다음 단계
+- Oregon에서는 Binance Futures 제약이 존재함
 
 다음 단계:
-- `infra/terraform/` 기반으로 인프라 코드화 고도화 또는 기존 리소스 import
-- 운영 Runbook / 장애 대응 문서 강화
-- 실거래 운영 데이터 기반 지표 정리
-- 계정 분리형 멀티 계정 구조 설계
+- 서울 리전 기준 포트폴리오 운영 시스템 안정화
+- 운영 체크리스트와 모니터링 증빙 강화
+- 이 프로젝트와 별개로 MT5 기반 멀티 전략 프로젝트를 별도 트랙으로 진행
 
----
-
-## 참고 자료
-- 모니터링 스택: `deploy/monitoring/`
-- 직무 타겟 문서: `docs/job_targets/`
-- 루트 포트폴리오 문서: [../README.md](../README.md)
+즉, 이 저장소는 앞으로도 **운영 가능한 자동화 시스템 포트폴리오**로 유지하고, MT5 기반 새 전략은 별도 저장소/별도 서버 구조로 분리하는 것이 맞습니다.

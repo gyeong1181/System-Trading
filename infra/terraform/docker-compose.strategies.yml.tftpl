@@ -9,12 +9,13 @@ services:
       - ./env/psar_rsi.env
     restart: unless-stopped
     ports:
-      - "8000:${psar_rsi_container_port}"
+      - "80:${psar_rsi_container_port}"
     volumes:
       - ./volumes/psar_rsi/logs:/app/logs
       - ./volumes/psar_rsi/data:/app/data
 %{ endif ~}
 
+%{ if enable_okx_qqq_container ~}
   okx_qqq:
     image: ${okx_qqq_image}
     container_name: okx_qqq
@@ -23,7 +24,9 @@ services:
     restart: unless-stopped
     volumes:
       - ./volumes/okx_qqq/logs:/app/logs
+%{ endif ~}
 
+%{ if enable_okx_xau_container ~}
   okx_xau:
     image: ${okx_xau_image}
     container_name: okx_xau
@@ -32,3 +35,4 @@ services:
     restart: unless-stopped
     volumes:
       - ./volumes/okx_xau/logs:/app/logs
+%{ endif ~}

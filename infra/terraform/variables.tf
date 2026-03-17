@@ -98,6 +98,18 @@ variable "enable_psar_container" {
   default     = false
 }
 
+variable "enable_okx_qqq_container" {
+  description = "Whether to run the OKX QQQ vendor container in the strategy stack."
+  type        = bool
+  default     = true
+}
+
+variable "enable_okx_xau_container" {
+  description = "Whether to run the OKX XAU vendor container in the strategy stack."
+  type        = bool
+  default     = true
+}
+
 variable "okx_qqq_image" {
   description = "External OKX QQQ strategy container image."
   type        = string
