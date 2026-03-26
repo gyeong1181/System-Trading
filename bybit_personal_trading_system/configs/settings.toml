@@ -1,0 +1,81 @@
+# 사용자 변경은 주로 .env 와 아래 롤아웃 설정만으로 충분합니다.
+
+[system]
+timezone = "Asia/Seoul"
+database_path = "data/trading.sqlite"
+log_level = "INFO"
+starting_equity = 280.0
+auto_select_from_research = true
+live_rollout = "S1_ONLY"
+state_path = "data/runtime/research_state.json"
+
+[risk]
+total_risk_pct = 0.0125
+symbol_risk_pct = 0.007
+daily_stop_pct = -0.015
+weekly_stop_pct = -0.035
+strategy_disable_pct = -0.04
+max_drawdown_target_pct = -0.10
+max_drawdown_hard_pct = -0.12
+
+[data]
+history_days = 1460
+fetch_limit = 1000
+market_dir = "data/market"
+save_csv = true
+save_parquet = true
+
+[execution]
+reconnect_seconds = 10
+fee_rate = 0.0006
+slippage = 0.0005
+demo_testnet = true
+default_leverage = 2
+bar_limit = 500
+summary_hour_kr = 9
+
+[research]
+in_sample_days = 365
+out_sample_days = 90
+step_days = 30
+minimum_history_days = 1095
+minimum_trade_count = 8
+warning_trade_count = 12
+plateau_score_ratio = 0.80
+
+[mode]
+demo_enabled_strategies = ["S1", "S2"]
+live_enabled_strategies = ["S1"]
+
+[telegram]
+enabled = true
+offset_path = "data/runtime/telegram_offset.txt"
+
+[strategies.S1]
+enabled = true
+class_name = "DonchianBreakoutStrategy"
+symbols = ["ETHUSDT"]
+timeframe = "240"
+research_timeframes = ["240", "360", "720", "D"]
+priority = 1
+leverage = 2
+demo_only = false
+
+[strategies.S2]
+enabled = true
+class_name = "EmaRsiTrendStrategy"
+symbols = ["ETHUSDT"]
+timeframe = "240"
+research_timeframes = ["240", "D"]
+priority = 2
+leverage = 2
+demo_only = false
+
+[strategies.S3]
+enabled = false
+class_name = "BollingerMeanReversionStrategy"
+symbols = ["ETHUSDT"]
+timeframe = "60"
+priority = 3
+leverage = 1
+demo_only = true

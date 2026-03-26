@@ -35,6 +35,8 @@
 - PSAR는 Oregon에서 Binance Futures 제약(`451`)을 확인했으므로 기본 배치 대상에서 제외
 - 멀티 컨테이너 운영 자체는 실제로 시도했으나, 외부 vendor 컨테이너는 Render 중심 운영 흐름에 더 맞는 부분이 있어 장기 운영 대상에서는 제외 가능성을 열어둠
 
+이 프로젝트에서 중요한 점은 "오리건 이전을 못 했다"가 아니라, 실제로 이전과 운영을 시도한 뒤 리전 적합성과 운영 적합성을 근거로 역할을 다시 정했다는 것이다.
+
 ---
 
 ## 시스템 개요
@@ -53,6 +55,7 @@ flowchart LR
 ```
 
 보조 이미지:
+- ![Portfolio Architecture Final](docs/Architecture/portfolio_architecture_final.png)
 - ![Architecture](docs/Architecture/Architecture.png)
 - ![Mermaid Architecture](docs/Architecture/Mermaid_Architecture.png)
 
@@ -126,6 +129,7 @@ flowchart LR
 운영 체크 문서:
 - [operations_checklist.md](docs/operations_checklist.md)
 - [seoul_portfolio_recovery_checklist.md](docs/seoul_portfolio_recovery_checklist.md)
+- [portfolio_architecture_mermaid_draft.md](docs/Architecture/portfolio_architecture_mermaid_draft.md)
 
 ---
 
@@ -162,6 +166,8 @@ flowchart LR
 - 비용 절감 시도는 실제로 수행
 - 그러나 Binance 리전 제약까지 고려해 최종 구조는 단순 통합이 아니라 **역할 분리형 구조**로 재조정
 
+즉, 비용을 줄이기 위한 기술적 시도도 했고, 그 과정에서 확인된 제약을 반영해 운영 구조를 다시 선택했다는 점이 이 프로젝트의 중요한 운영 판단이다.
+
 ---
 
 ## 문제 해결 경험
@@ -189,3 +195,5 @@ flowchart LR
 - 이 프로젝트와 별개로 MT5 기반 멀티 전략 프로젝트를 별도 트랙으로 진행
 
 즉, 이 저장소는 앞으로도 **운영 가능한 자동화 시스템 포트폴리오**로 유지하고, MT5 기반 새 전략은 별도 저장소/별도 서버 구조로 분리하는 것이 맞습니다.
+
+현재 상태 기준으로는 포트폴리오 및 취업용 프로젝트로 마감 가능한 수준까지 정리되었고, 이후에는 운영 모니터링과 소규모 보완 위주로 관리할 계획입니다.

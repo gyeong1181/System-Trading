@@ -39,6 +39,7 @@
 - Oregon에서 Binance Futures 접근 시 `451` 제약을 확인
 - 따라서 내가 만든 PSAR 실행기는 Oregon에 두는 것이 맞지 않다고 판단
 - 결과적으로 `서울 = 포트폴리오용 PSAR`, `오리건 = OKX 외부 전략`으로 역할을 분리
+- 외부 vendor 전략 컨테이너 역시 Render 외 환경에서 멀티 컨테이너로 운영을 시도했지만, 실제 장기 운영은 원 제작자 환경 흐름과의 적합성까지 함께 고려해 재판단
 
 이 판단은 기능 추가보다 **운영 적합성 판단**을 우선한 결정입니다.
 
@@ -89,9 +90,16 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
   - 비용 절감 관점의 서버 통합 검토 경험
   - 외부 전략 컨테이너를 Render 외 환경으로 이전 시도하며, 실제 운영 적합성을 검토한 경험
 
+정리:
+- "완전 이전 성공"을 과장하지 않음
+- 대신 Terraform 기반 이전, 멀티 컨테이너 구동, 런타임 병목 추적, 제약 확인, 구조 재조정까지 실제로 수행한 경험으로 설명
+
 ---
 
 ## 운영 증빙
+
+### Final Portfolio Architecture
+![Portfolio Architecture](psar_rsi_bot/docs/Architecture/portfolio_architecture_final.png)
 
 ### CloudWatch Logs Insights
 ![CloudWatch Logs Insights](psar_rsi_bot/docs/cloudwatch_insights2.png)
@@ -154,6 +162,7 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 - 외부 vendor 컨테이너를 Render 외 환경에서 운영 가능한지 확인
 - Binance Futures의 Oregon 리전 제약(`451`) 확인
 - 검증 결과를 바탕으로 서울 리전 유지, 오리건 역할 축소라는 결론 도출
+- 외부 vendor Docker 2종도 Render 외 환경에서 운용을 시도했으나, 원 제작자 운영 흐름과의 적합성을 검토한 뒤 무리한 완전 이전 대신 구조 검증 경험으로 정리
 
 즉, 최종적으로 완전 이전하지 않았더라도, 인프라 이전과 멀티 컨테이너 운영을 직접 시도하고 제약을 확인한 경험 자체는 충분히 어필 가능한 운영 경험이다.
 
@@ -197,6 +206,8 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 - 이 문서: 저장소 전체 포트폴리오 개요
 - [psar_rsi_bot/README.md](psar_rsi_bot/README.md): PSAR 실행기 기술 문서
 - [server_role_split.md](psar_rsi_bot/docs/Architecture/server_role_split.md): 서울/오리건 서버 분리 아키텍처
+- [portfolio_architecture_final.png](psar_rsi_bot/docs/Architecture/portfolio_architecture_final.png): 최종 포트폴리오 아키텍처 도면
+- [portfolio_architecture_mermaid_draft.md](psar_rsi_bot/docs/Architecture/portfolio_architecture_mermaid_draft.md): 포트폴리오용 Mermaid 아키텍처 초안
 - [2026-03-17_region_role_split.md](psar_rsi_bot/docs/decision_log/2026-03-17_region_role_split.md): 기술적 의사결정 로그
 - [seoul_portfolio_recovery_checklist.md](psar_rsi_bot/docs/seoul_portfolio_recovery_checklist.md): 서울 포트폴리오 서버 재가동 체크리스트
 - [job_targets/README.md](psar_rsi_bot/docs/job_targets/README.md): 취업용 설명 포인트
@@ -215,6 +226,8 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 - 향후 MT5 프로젝트: 별도 리포지토리/별도 인프라 트랙으로 분리
 
 이 방향이 가장 관리 가능하고, 포트폴리오 설명도 명확합니다.
+
+현재 이 프로젝트는 포트폴리오와 취업용 프로젝트 기준으로는 마감 가능한 수준까지 정리되었고, 이후에는 운영 모니터링과 최소한의 유지보수 위주로 관리할 예정입니다.
 
 ---
 

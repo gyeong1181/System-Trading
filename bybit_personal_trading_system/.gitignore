@@ -1,0 +1,14 @@
+.env
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+*.log
+data/market/*.csv
+data/market/*.parquet
+data/runtime/*.json
+reports/*.html
+reports/*.csv
+reports/*.json
+logs/*.log
