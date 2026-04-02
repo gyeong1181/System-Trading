@@ -27,4 +27,6 @@ jobs:
       - name: Run tests (pytest)
         run: |
           pip install pytest
-          pytest -q psar_rsi_bot/tests bybit_personal_trading_system/tests
+          pytest -q psar_rsi_bot/tests
+          cd bybit_personal_trading_system
+          pytest -q tests

@@ -1,4 +1,0 @@
-2025-11-17 09:49:36 | INFO     | BTCTrendFollower | Running offline paper simulation on 200 bars
-2025-11-17 09:49:37 | INFO     | PaperExchange | [PAPER] Enter BTCUSDT LONG qty=0.029392 entry=110009.80 stop=106607.54 tp1=118515.46 runner=123618.85
-2025-11-17 09:49:38 | INFO     | PaperExchange | [PAPER] Close BTCUSDT LONG qty=0.029392 price=112513.99 reason=ATR Stop/Trail pnl=73.60 equity=10071.95
-2025-11-17 09:49:42 | INFO     | BTCTrendFollower | Paper test completed. Final equity 10071.95

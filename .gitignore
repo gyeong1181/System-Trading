@@ -41,6 +41,7 @@ reports/
 backups/
 *.bak
 *.tmp
+.reverse_tools/
 
 # OS files
 .DS_Store

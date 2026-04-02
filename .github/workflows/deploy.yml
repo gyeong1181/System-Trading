@@ -26,6 +26,8 @@ jobs:
         run: |
           rsync -az --delete \
             --exclude '.git' \
+            --exclude '.reverse_tools' \
+            --exclude 'recovered_autotrade' \
             -e "ssh -i ~/.ssh/id_rsa" \
             ./ "${EC2_USER}@${EC2_HOST}:/home/ec2-user/systemTrading/"
         env:
