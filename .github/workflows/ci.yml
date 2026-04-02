@@ -34,6 +34,7 @@ jobs:
         working-directory: bybit_personal_trading_system
     env:
       PYTHONNOUSERSITE: "1"
+      PYTHONPATH: ${{ github.workspace }}/bybit_personal_trading_system
     steps:
       - uses: actions/checkout@v5
       - name: Set up Python
@@ -51,7 +52,7 @@ jobs:
       - name: Verify Bybit import path
         run: |
           . .venv-ci/bin/activate
-          python -c "import src.config as config; print(config.__file__)"
+          python -c "import sys; print(sys.path[0:5]); import src.config as config; print(config.__file__)"
       - name: Run Bybit tests
         run: |
           . .venv-ci/bin/activate
