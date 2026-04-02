@@ -40,7 +40,7 @@ fi
 
 echo "[3/7] Docker와 필수 도구를 설치합니다."
 if command -v apt-get >/dev/null 2>&1; then
-  sudo apt-get install -y docker.io docker-compose-plugin git make curl
+  sudo apt-get install -y docker.io git make curl
 elif command -v dnf >/dev/null 2>&1; then
   sudo dnf install -y docker git make curl
 elif command -v yum >/dev/null 2>&1; then

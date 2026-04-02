@@ -5,7 +5,14 @@ echo "[1/5] 패키지 목록을 갱신합니다."
 sudo apt-get update
 
 echo "[2/5] 필수 패키지를 설치합니다."
-sudo apt-get install -y docker.io docker-compose-plugin make python3 python3-pip python3-venv curl
+sudo apt-get install -y docker.io make python3 python3-pip python3-venv curl
+
+if ! docker compose version >/dev/null 2>&1; then
+  sudo mkdir -p /usr/local/lib/docker/cli-plugins
+  sudo curl -SL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
+  sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+fi
 
 echo "[3/5] Docker 서비스를 활성화합니다."
 sudo systemctl enable --now docker
