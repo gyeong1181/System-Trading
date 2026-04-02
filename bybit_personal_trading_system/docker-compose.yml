@@ -7,10 +7,12 @@ services:
     working_dir: /app
     env_file:
       - .env
+    environment:
+      TRADER_COMMAND: ${TRADER_COMMAND:-paper-start}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./reports:/app/reports
       - ./configs:/app/configs
     restart: unless-stopped
-    command: ["python", "-m", "src.cli", "status"]
+    command: ["sh", "-c", "python -m src.cli ${TRADER_COMMAND}"]

@@ -1,7 +1,7 @@
 PYTHON ?= python
 CLI = $(PYTHON) -m src.cli
 
-.PHONY: bootstrap data-fetch research-all report demo-start live-start status pause resume kill test
+.PHONY: bootstrap data-fetch research-all report paper-start demo-start live-start status pause resume kill test
 
 bootstrap:
 	$(CLI) bootstrap
@@ -14,6 +14,9 @@ research-all:
 
 report:
 	$(CLI) report
+
+paper-start:
+	$(CLI) paper-start
 
 demo-start:
 	$(CLI) demo-start

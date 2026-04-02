@@ -106,9 +106,10 @@ class TradingService:
         return "리포트 생성을 마쳤습니다.\n" + "\n".join(report_paths.values())
 
     def start(self, mode: str) -> str:
-        if mode not in {"demo", "live"}:
+        if mode not in {"paper", "demo", "live"}:
             raise RuntimeError("지원하지 않는 실행 모드입니다.")
-        require_trading_credentials(self.settings)
+        if mode in {"demo", "live"}:
+            require_trading_credentials(self.settings)
         strategies = build_strategy_registry(self.settings)
         risk_manager = RiskManager(self.settings, self.db)
         portfolio_manager = PortfolioManager(self.settings, self.db, risk_manager)

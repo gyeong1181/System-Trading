@@ -1,0 +1,52 @@
+name: Deploy Bybit Paper Trader
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "bybit_personal_trading_system/**"
+      - ".github/workflows/deploy-bybit-paper.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+        env:
+          EC2_SSH_KEY: ${{ secrets.BYBIT_PAPER_EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.BYBIT_PAPER_EC2_HOST }}
+
+      - name: Sync bybit paper repo
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.venv' \
+            --exclude '__pycache__' \
+            -e "ssh -i ~/.ssh/id_rsa" \
+            ./bybit_personal_trading_system/ \
+            "${EC2_USER}@${EC2_HOST}:${REMOTE_DIR}/"
+        env:
+          EC2_USER: ${{ secrets.BYBIT_PAPER_EC2_USER }}
+          EC2_HOST: ${{ secrets.BYBIT_PAPER_EC2_HOST }}
+          REMOTE_DIR: /home/${{ secrets.BYBIT_PAPER_EC2_USER }}/bybit_personal_trading_system
+
+      - name: Install or restart paper trader
+        run: |
+          ssh -i ~/.ssh/id_rsa "${EC2_USER}@${EC2_HOST}" "
+            cd ${REMOTE_DIR} &&
+            chmod +x scripts/install_ec2_paper.sh &&
+            ./scripts/install_ec2_paper.sh
+          "
+        env:
+          EC2_USER: ${{ secrets.BYBIT_PAPER_EC2_USER }}
+          EC2_HOST: ${{ secrets.BYBIT_PAPER_EC2_HOST }}
+          REMOTE_DIR: /home/${{ secrets.BYBIT_PAPER_EC2_USER }}/bybit_personal_trading_system

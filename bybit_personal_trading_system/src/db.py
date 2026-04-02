@@ -310,6 +310,18 @@ class Database:
             row = conn.execute(query, params).fetchone()
         return dict(row) if row else None
 
+    def get_peak_equity(self, mode: str | None = None) -> float | None:
+        query = "SELECT MAX(total_equity) AS peak_equity FROM equity"
+        params: tuple[Any, ...] = ()
+        if mode:
+            query += " WHERE mode = ?"
+            params = (mode,)
+        with self.connect() as conn:
+            row = conn.execute(query, params).fetchone()
+        if not row or row["peak_equity"] is None:
+            return None
+        return float(row["peak_equity"])
+
     def get_recent_events(self, limit: int = 20) -> list[dict[str, Any]]:
         with self.connect() as conn:
             rows = conn.execute(

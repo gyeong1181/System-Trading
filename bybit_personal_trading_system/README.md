@@ -117,6 +117,12 @@ Telegram 명령:
 - `/resume`
 - `/kill`
 
+## EC2 페이퍼 트레이딩
+
+- Bybit API 키 없이 `paper-start` 로 실시간 검증이 가능합니다.
+- 새 EC2에서는 `scripts/install_ec2_paper.sh` 만 실행하면 Docker, systemd, 자동 재시작까지 한 번에 설정합니다.
+- 자세한 절차는 `README_PAPER_EC2.md` 를 참고하면 됩니다.
+
 ## 주의
 
 - 지금 단계에서는 전략 추가, 자산군 확대, UI 추가를 하지 않습니다.

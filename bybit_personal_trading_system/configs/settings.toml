@@ -44,6 +44,7 @@ warning_trade_count = 12
 plateau_score_ratio = 0.80
 
 [mode]
+paper_enabled_strategies = ["S1"]
 demo_enabled_strategies = ["S1", "S2"]
 live_enabled_strategies = ["S1"]
 

@@ -19,6 +19,7 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f psar_rsi_bot/requirements.txt ]; then pip install -r psar_rsi_bot/requirements.txt; fi
+          if [ -f bybit_personal_trading_system/requirements.txt ]; then pip install -r bybit_personal_trading_system/requirements.txt; fi
       - name: Run lint (flake8)
         run: |
           pip install flake8
@@ -26,4 +27,4 @@ jobs:
       - name: Run tests (pytest)
         run: |
           pip install pytest
-          pytest -q psar_rsi_bot/tests
+          pytest -q psar_rsi_bot/tests bybit_personal_trading_system/tests

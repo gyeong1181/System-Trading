@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title or "AI Cloud Career Opportunity Watcher" }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div>
+        <p class="eyebrow">판단 보조형 기회 워처</p>
+        <h1>AI Cloud Career Opportunity Watcher</h1>
+        <p class="subcopy">공개 채용과 기업 변화 신호를 수집하고, 승인 후 Telegram 다이제스트로 보내는 경량 운영 UI</p>
+      </div>
+      <nav class="actions">
+        <a class="button secondary" href="/admin/">대시보드</a>
+        <a class="button secondary" href="/admin/digest">다이제스트 미리보기</a>
+      </nav>
+    </header>
+    <main class="layout">
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+  </html>
