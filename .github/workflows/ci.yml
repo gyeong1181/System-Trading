@@ -32,8 +32,6 @@ jobs:
     defaults:
       run:
         working-directory: bybit_personal_trading_system
-    env:
-      PYTHONPATH: ${{ github.workspace }}/bybit_personal_trading_system
     steps:
       - uses: actions/checkout@v5
       - name: Set up Python
@@ -45,6 +43,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest
           pip install -r requirements.txt
+          pip install --no-build-isolation -e .
       - name: Run Bybit tests
         run: |
-          pytest -q tests
+          python -m pytest -q tests
