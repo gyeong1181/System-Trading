@@ -11,52 +11,35 @@ class DonchianBreakoutStrategy(BaseStrategy):
     display_name_ko = "돈치안 돌파"
 
     def default_params(self) -> dict[str, Any]:
-        return {
-            "lookback": 30,
-            "exit_lookback": 15,
+        defaults = {
+            "lookback": 35,
             "ema_filter_length": 200,
             "adx_length": 14,
             "adx_threshold": 20,
-            "volatility_window": 50,
-            "volatility_floor_ratio": 1.0,
-            "cooldown_bars": 3,
             "atr_length": 14,
-            "atr_mult": 2.0,
-            "break_even_trigger_atr": 0.0,
+            "atr_mult": 2.75,
+            "cooldown_bars": 2,
+            "break_even_trigger_atr": 1.0,
         }
+        return {**defaults, **self.config.default_params}
 
     def param_grid(self) -> list[dict[str, Any]]:
-        pair_templates = [
-            {"lookback": 20, "exit_lookback": 10, "cooldown_bars": 2},
-            {"lookback": 30, "exit_lookback": 10, "cooldown_bars": 3},
-            {"lookback": 30, "exit_lookback": 15, "cooldown_bars": 3},
-            {"lookback": 40, "exit_lookback": 15, "cooldown_bars": 4},
-        ]
-        regime_templates = [
-            {"ema_filter_length": 150, "adx_length": 14, "adx_threshold": 18},
-            {"ema_filter_length": 200, "adx_length": 14, "adx_threshold": 20},
-        ]
-        volatility_templates = [
-            {"volatility_window": 50, "volatility_floor_ratio": 0.9},
-            {"volatility_window": 50, "volatility_floor_ratio": 1.0},
-            {"volatility_window": 50, "volatility_floor_ratio": 1.1},
-        ]
+        defaults = self.default_params()
         grid = []
-        for pair in pair_templates:
-            for regime in regime_templates:
-                for volatility in volatility_templates:
-                    for atr_mult in [2.0, 2.5, 3.0]:
-                        for break_even_trigger_atr in [0.0, 1.0, 1.5]:
-                            grid.append(
-                                {
-                                    **pair,
-                                    **regime,
-                                    **volatility,
-                                    "atr_length": 14,
-                                    "atr_mult": atr_mult,
-                                    "break_even_trigger_atr": break_even_trigger_atr,
-                                }
-                            )
+        for lookback in [20, 25, 30, 35, 40, 45, 50]:
+            exit_lookback = max(10, lookback // 2)
+            volatility_window = max(50, lookback)
+            for atr_mult in [2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5]:
+                grid.append(
+                    {
+                        **defaults,
+                        "lookback": lookback,
+                        "exit_lookback": exit_lookback,
+                        "volatility_window": volatility_window,
+                        "volatility_floor_ratio": 1.0,
+                        "atr_mult": atr_mult,
+                    }
+                )
         return grid
 
     def generate_signals(self, frame: pd.DataFrame, params: dict[str, Any] | None = None) -> pd.DataFrame:

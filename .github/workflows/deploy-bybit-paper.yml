@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup SSH key
         run: |
@@ -27,6 +27,7 @@ jobs:
 
       - name: Sync bybit paper repo
         run: |
+          ssh -i ~/.ssh/id_rsa "${EC2_USER}@${EC2_HOST}" "mkdir -p ${REMOTE_DIR}"
           rsync -az --delete \
             --exclude '.git' \
             --exclude '.venv' \

@@ -6,27 +6,42 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
+  psar-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
+      - name: Install PSAR dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f psar_rsi_bot/requirements.txt ]; then pip install -r psar_rsi_bot/requirements.txt; fi
-          if [ -f bybit_personal_trading_system/requirements.txt ]; then pip install -r bybit_personal_trading_system/requirements.txt; fi
+          pip install pytest
+          pip install -r psar_rsi_bot/requirements.txt
       - name: Run lint (flake8)
         run: |
           pip install flake8
-          flake8 . --max-line-length=120 || true
-      - name: Run tests (pytest)
+          flake8 psar_rsi_bot --max-line-length=120 || true
+      - name: Run PSAR tests
         run: |
-          pip install pytest
           pytest -q psar_rsi_bot/tests
-          cd bybit_personal_trading_system
+
+  bybit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Bybit dependencies
+        working-directory: bybit_personal_trading_system
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          pip install -r requirements.txt
+      - name: Run Bybit tests
+        working-directory: bybit_personal_trading_system
+        run: |
           pytest -q tests
