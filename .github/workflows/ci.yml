@@ -29,6 +29,11 @@ jobs:
 
   bybit-tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bybit_personal_trading_system
+    env:
+      PYTHONPATH: ${{ github.workspace }}/bybit_personal_trading_system
     steps:
       - uses: actions/checkout@v5
       - name: Set up Python
@@ -36,12 +41,10 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install Bybit dependencies
-        working-directory: bybit_personal_trading_system
         run: |
           python -m pip install --upgrade pip
           pip install pytest
           pip install -r requirements.txt
       - name: Run Bybit tests
-        working-directory: bybit_personal_trading_system
         run: |
           pytest -q tests
