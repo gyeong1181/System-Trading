@@ -10,6 +10,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# GitHub Actions runner may already have unrelated top-level packages such as
+# `src` imported. Force our repo root to win before test collection.
+for package_name in ("src", "alerts", "execution", "portfolio", "research", "strategies"):
+    loaded = sys.modules.get(package_name)
+    if loaded is None:
+        continue
+    module_file = getattr(loaded, "__file__", "") or ""
+    if str(REPO_ROOT) not in module_file:
+        sys.modules.pop(package_name, None)
+
 
 @pytest.fixture()
 def repo_root(tmp_path: Path) -> Path:
