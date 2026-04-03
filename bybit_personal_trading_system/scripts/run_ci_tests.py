@@ -38,8 +38,7 @@ def main() -> int:
     if ROOT_STR not in sys.path:
         sys.path.insert(0, ROOT_STR)
 
-    for package_name in ("src", "alerts", "execution", "portfolio", "research", "strategies"):
-        _force_local_package(package_name)
+    _force_local_package("src")
 
     import src.config as config  # noqa: PLC0415
     import pytest  # noqa: PLC0415
