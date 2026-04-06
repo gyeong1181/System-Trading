@@ -10,11 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Show Bybit CI target revision
-        run: |
-          git rev-parse --short HEAD
-          ls -la scripts/run_ci_tests.py
-          ls -la src/config.py
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
