@@ -21,6 +21,7 @@ trade_signals.csv
 .env.local
 .env.*.local
 config.py
+!bybit_personal_trading_system/src/config.py
 *.pem
 
 # Terraform local state
