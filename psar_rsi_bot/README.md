@@ -35,7 +35,7 @@
 - PSAR는 Oregon에서 Binance Futures 제약(`451`)을 확인했으므로 기본 배치 대상에서 제외
 - 멀티 컨테이너 운영 자체는 실제로 시도했으나, 외부 vendor 컨테이너는 Render 중심 운영 흐름에 더 맞는 부분이 있어 장기 운영 대상에서는 제외 가능성을 열어둠
 
-이 프로젝트에서 중요한 점은 "오리건 이전을 못 했다"가 아니라, 실제로 이전과 운영을 시도한 뒤 리전 적합성과 운영 적합성을 근거로 역할을 다시 정했다는 것이다.
+이 프로젝트에서 중요한 점은 "오리건 이전을 못 했다"가 아니라, 실제로 이전과 운영을 시도한 뒤 리전 적합성과 운영 적합성을 근거로 역할을 다시 정했다는 점입니다.
 
 ---
 
@@ -130,6 +130,19 @@ flowchart LR
 - [operations_checklist.md](docs/operations_checklist.md)
 - [seoul_portfolio_recovery_checklist.md](docs/seoul_portfolio_recovery_checklist.md)
 - [portfolio_architecture_mermaid_draft.md](docs/Architecture/portfolio_architecture_mermaid_draft.md)
+- [nightly_s3_backup.md](docs/nightly_s3_backup.md)
+
+---
+
+## Nightly Backup
+
+서울 서버 기준으로 `소스 코드 + 매매 로그`를 매일 밤 12시에 S3로 올리는 자동 백업 스크립트와 crontab 예시를 추가했습니다.
+
+- Script: `psar_rsi_bot/scripts/nightly_s3_backup.sh`
+- Crontab: `psar_rsi_bot/scripts/nightly_s3_backup.crontab.example`
+- Guide: [nightly_s3_backup.md](docs/nightly_s3_backup.md)
+
+목적은 운영 중인 시스템에 정기 보존 정책을 직접 구성하고 검증한 경험을 남기기 위함입니다.
 
 ---
 
@@ -146,8 +159,8 @@ flowchart LR
 
 추가 판단:
 - 외부 vendor 전략 2종도 Oregon에서 멀티 컨테이너로 실제 구동을 시도했다
-- 다만 운영 과정에서 해당 컨테이너가 Render 환경 기준으로 더 안정적으로 설계된 정황을 확인했다
-- 따라서 "이전 자체를 못 했다"가 아니라, "이전과 멀티 컨테이너 운영을 시도했고, 운영 적합성을 검토한 뒤 유지 여부를 다시 판단했다"는 흐름으로 정리하는 것이 맞다
+- 다만 운영 과정에서 해당 컨테이너가 Render 환경 기준으로 더 안정적으로 설계된 정황을 확인했습니다.
+- 따라서 "이전 자체를 못 했다"가 아니라, "이전과 멀티 컨테이너 운영을 시도했고, 운영 적합성을 검토한 뒤 유지 여부를 다시 판단했다"는 흐름으로 정리하는 것이 맞습니다.
 
 이 판단은 "일단 다 올리고 본다"가 아니라, **실제 제약을 확인한 뒤 워크로드를 분리한 운영 결정**이라는 점에서 의미가 있습니다.
 
@@ -166,7 +179,7 @@ flowchart LR
 - 비용 절감 시도는 실제로 수행
 - 그러나 Binance 리전 제약까지 고려해 최종 구조는 단순 통합이 아니라 **역할 분리형 구조**로 재조정
 
-즉, 비용을 줄이기 위한 기술적 시도도 했고, 그 과정에서 확인된 제약을 반영해 운영 구조를 다시 선택했다는 점이 이 프로젝트의 중요한 운영 판단이다.
+비용을 줄이기 위한 기술적 시도도 했고, 그 과정에서 확인된 제약을 반영해 운영 구조를 재조정했다는 점이 이 프로젝트에서 중요한 판단입니다.
 
 ---
 

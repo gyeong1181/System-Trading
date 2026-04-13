@@ -1,0 +1,18 @@
+# Run every day at 00:00 KST.
+# Adjust S3_URI to your actual bucket/prefix before registering.
+#
+# Registration example:
+#   chmod +x /home/ec2-user/systemTrading/psar_rsi_bot/scripts/nightly_s3_backup.sh
+#   crontab /home/ec2-user/systemTrading/psar_rsi_bot/scripts/nightly_s3_backup.crontab.example
+#
+# Or append only the last line with: crontab -e
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+S3_URI=s3://YOUR-BUCKET-NAME/systemTrading-backups
+PROJECT_ROOT=/home/ec2-user/systemTrading
+LOG_ROOT=/home/ec2-user/systemTrading/psar_rsi_bot/logs
+LOCAL_BACKUP_DIR=/home/ec2-user/backups/nightly
+AWS_CLI_BIN=/usr/bin/aws
+
+0 0 * * * /usr/bin/env bash /home/ec2-user/systemTrading/psar_rsi_bot/scripts/nightly_s3_backup.sh >> /home/ec2-user/backups/nightly/cron.log 2>&1

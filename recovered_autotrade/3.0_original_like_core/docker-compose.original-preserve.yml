@@ -1,0 +1,12 @@
+services:
+  exitant_okx_3_0_original:
+    image: exitant/exitant-okx-3.0:latest
+    container_name: exitant-okx-3-0-original
+    restart: unless-stopped
+    env_file:
+      - .env
+    working_dir: /app
+    command: ["./autotrade"]
+    volumes:
+      - ./runtime_state/auth:/app/auth
+      - ./runtime_state/logs:/app/logs

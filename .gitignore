@@ -43,6 +43,7 @@ backups/
 *.bak
 *.tmp
 .reverse_tools/
+pytest-cache-files-*/
 
 # OS files
 .DS_Store

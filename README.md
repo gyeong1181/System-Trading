@@ -39,9 +39,9 @@
 - Oregon에서 Binance Futures 접근 시 `451` 제약을 확인
 - 따라서 내가 만든 PSAR 실행기는 Oregon에 두는 것이 맞지 않다고 판단
 - 결과적으로 `서울 = 포트폴리오용 PSAR`, `오리건 = OKX 외부 전략`으로 역할을 분리
-- 외부 vendor 전략 컨테이너 역시 Render 외 환경에서 멀티 컨테이너로 운영을 시도했지만, 실제 장기 운영은 원 제작자 환경 흐름과의 적합성까지 함께 고려해 재판단
+- 외부 vendor 전략 컨테이너 역시 Render 외 환경에서 멀티 컨테이너로 운영을 시도했으나, 장기 운영 여부는 원 제작자 환경과의 적합성까지 고려해 별도로 재검토했습니다.
 
-이 판단은 기능 추가보다 **운영 적합성 판단**을 우선한 결정입니다.
+이 결정은 기능 추가보다 **운영 적합성**을 우선한 판단입니다.
 
 ---
 
@@ -155,7 +155,7 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 
 ## 시도와 판단
 
-이 프로젝트에서는 실제로 아래를 수행했다.
+이 프로젝트에서는 실제로 아래를 수행했습니다.
 
 - 서울 리전에서 운영 중이던 시스템을 Terraform 기반으로 Oregon 리전에 옮기는 시도
 - Oregon에서 `PSAR + OKX Nasdaq + OKX Gold` 멀티 컨테이너 운용 검증
@@ -164,7 +164,7 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 - 검증 결과를 바탕으로 서울 리전 유지, 오리건 역할 축소라는 결론 도출
 - 외부 vendor Docker 2종도 Render 외 환경에서 운용을 시도했으나, 원 제작자 운영 흐름과의 적합성을 검토한 뒤 무리한 완전 이전 대신 구조 검증 경험으로 정리
 
-즉, 최종적으로 완전 이전하지 않았더라도, 인프라 이전과 멀티 컨테이너 운영을 직접 시도하고 제약을 확인한 경험 자체는 충분히 어필 가능한 운영 경험이다.
+최종적으로 완전 이전을 하지 않았더라도, 인프라 이전과 멀티 컨테이너 운영을 직접 시도하고 제약을 확인한 경험 자체는 충분히 어필 가능한 운영 경험입니다.
 
 ---
 
@@ -234,3 +234,15 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 ## Contact
 
 - Email: `gyeong1181@gmail.com`
+
+---
+
+## Nightly Backup
+
+운영 자동화의 일부로 서울 서버 기준 `소스 코드 + 매매 로그`를 매일 밤 12시에 S3로 백업하는 스크립트와 crontab 예시를 추가했습니다.
+
+- Script: `psar_rsi_bot/scripts/nightly_s3_backup.sh`
+- Crontab: `psar_rsi_bot/scripts/nightly_s3_backup.crontab.example`
+- Guide: [psar_rsi_bot/docs/nightly_s3_backup.md](psar_rsi_bot/docs/nightly_s3_backup.md)
+
+이 백업은 `.env`, `terraform.tfvars`, SSM 로컬 파일 같은 민감 정보를 기본적으로 제외하고, 코드와 로그만 별도 보관하도록 설계했습니다.
