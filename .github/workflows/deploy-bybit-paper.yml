@@ -2,11 +2,6 @@ name: Deploy Bybit Paper Trader
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "bybit_personal_trading_system/**"
-      - ".github/workflows/deploy-bybit-paper.yml"
 
 jobs:
   deploy:

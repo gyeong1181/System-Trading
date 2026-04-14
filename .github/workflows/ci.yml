@@ -26,28 +26,3 @@ jobs:
       - name: Run PSAR tests
         run: |
           pytest -q psar_rsi_bot/tests
-
-  bybit-tests:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: bybit_personal_trading_system
-    env:
-      PYTHONNOUSERSITE: "1"
-    steps:
-      - uses: actions/checkout@v5
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Create isolated venv and install Bybit dependencies
-        run: |
-          python -m venv .venv-ci
-          . .venv-ci/bin/activate
-          python -m pip install --upgrade pip setuptools wheel
-          pip install pytest
-          pip install -r requirements.txt
-      - name: Run Bybit tests
-        run: |
-          . .venv-ci/bin/activate
-          python scripts/run_ci_tests.py
