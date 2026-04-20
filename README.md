@@ -24,8 +24,8 @@ TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance 
 - 구성: `FastAPI`, `EC2`, `systemd`, `GitHub Actions`, `Prometheus`, `Grafana`, `Telegram`
 
 프로젝트 보기:
-- [Repository Main README](./PORTFOLIO_README.md)
-- [Project Technical README](./psar_rsi_bot/README.md)
+- [전체 포트폴리오 개요 (운영 증빙 포함)](./PORTFOLIO_README.md)
+- [PSAR 봇 기술 상세 (구현·배포·메트릭)](./psar_rsi_bot/README.md)
 
 ## Tech Stack
 - Cloud: `AWS EC2`, `IAM`, `CloudWatch Logs`
