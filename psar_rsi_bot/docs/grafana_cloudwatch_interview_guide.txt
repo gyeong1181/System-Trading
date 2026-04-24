@@ -1,0 +1,154 @@
+Grafana · Prometheus · CloudWatch 운영 가이드 (취업 면접 대비)
+
+작성일: 2026-04
+관련 레포: System-Trading (github.com/gyeong1181/System-Trading)
+
+══════════════════════════════════════════════════════════
+
+1. 각 서비스 역할 — 한 줄 요약
+
+서비스               | 역할
+─────────────────────┼──────────────────────────────────────────────────────────────────
+CloudWatch (AWS)     | AWS의 기본 제공 로그·메트릭 저장소. "창고" 역할.
+Prometheus           | 앱이 노출하는 숫자(메트릭) 전용 시계열 DB. "계량기" 역할.
+Grafana              | Prometheus / CloudWatch 등 여러 소스를 연결해 시각화. "전광판".
+
+비유: CloudWatch = 블랙박스 SD카드, Prometheus = 연료계 계기판, Grafana = 자동차 계기판 화면
+
+══════════════════════════════════════════════════════════
+
+2. 현재 시스템 구성 (psar_rsi_bot)
+
+[FastAPI 앱]
+  └─ /metrics 엔드포인트 노출 (prometheus_client 라이브러리)
+       └─ Prometheus 컨테이너가 15초마다 스크랩
+            └─ Grafana가 Prometheus를 데이터소스로 쿼리
+                 └─ 대시보드 시각화 + Alert Rule → Telegram 알림
+
+[CloudWatch]
+  - IAM Role에 CloudWatchAgentServerPolicy 권한 부여됨
+  - 현재: 앱 로그를 CloudWatch로 직접 송신하는 Agent 미설정 상태 (개선 가능)
+  - 개선 방향: CloudWatch Agent 설치 → 로그 그룹 → Grafana CloudWatch 데이터소스 추가
+
+══════════════════════════════════════════════════════════
+
+3. 현재 수집 중인 Prometheus 메트릭 목록
+
+메트릭 이름                  | 설명
+─────────────────────────────┼──────────────────────────────────────
+webhook_received_total        | 심볼별 Webhook 수신 횟수
+webhook_result_total          | 처리 결과(상태, 심볼, 액션)별 카운터
+webhook_process_seconds       | Webhook 처리 레이턴시 히스토그램
+order_result_total            | 주문 성공/실패 카운터
+order_skip_total              | 주문 스킵 횟수
+binance_api_error_total       | Binance API 오류 횟수
+telegram_send_total           | Telegram 알림 전송 횟수
+telegram_send_fail_total      | Telegram 전송 실패 횟수 (사유별)
+app_uptime_seconds            | 앱 가동 시간
+
+══════════════════════════════════════════════════════════
+
+4. Grafana Alert Rules (설정된 규칙)
+
+규칙 이름                  | 조건                       | 의미
+───────────────────────────┼────────────────────────────┼──────────────────────────────────────────
+Webhook_No_Traffic_10m     | 10분간 Webhook 수신 없음   | TradingView 연결 이상 가능성
+Order_Error_15m            | 15분 내 주문 오류 발생     | Binance API 오류 / 잔고 부족
+Binance_401_5m             | API 인증 오류              | API 키 만료 또는 권한 오류
+Telegram_Failure_15m       | 알림 전송 실패             | Bot token 이상 또는 네트워크 오류
+
+▶ Alert 발생 시: Grafana → Telegram Bot으로 알림 전송 (Contact Point 설정)
+
+══════════════════════════════════════════════════════════
+
+5. CloudWatch → Grafana 연동 방법 (현재 미연동 → 향후 작업)
+
+단계 1: IAM 권한 확인
+  - EC2 인스턴스에 CloudWatchReadOnlyAccess 또는 CloudWatchAgentServerPolicy 부여 (이미 됨)
+
+단계 2: Grafana에 CloudWatch 데이터소스 추가
+  - Grafana UI → Configuration → Data Sources → Add data source → CloudWatch
+  - Auth: EC2 Instance Role (IAM Role 활용, 키 불필요)
+  - Region: ap-northeast-2 (Seoul)
+
+단계 3: 로그 쿼리
+  - Grafana Explore → CloudWatch Logs → Log Groups 선택
+  - 예: fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp desc
+
+★ 핵심 포인트: CloudWatch Logs Insights를 Grafana로 끌어오면
+  "메트릭 대시보드(Prometheus)"와 "앱 로그(CloudWatch)"를 한 화면에서 볼 수 있음
+  → 장애 발생 시 메트릭 이상 시점과 로그 에러를 동시에 확인 가능
+
+══════════════════════════════════════════════════════════
+
+6. Grafana 대시보드 공유 방법
+
+방법 A: Snapshot 공유 (가장 간단)
+  - Grafana 대시보드 → Share → Snapshot → Publish
+  - 외부 공개 URL 생성 (로그인 불필요)
+  - 포트폴리오 README에 링크 삽입 가능
+
+방법 B: Anonymous Access 허용 (영구 공개)
+  - grafana.ini: [auth.anonymous] enabled = true
+  - 누구나 URL로 대시보드 열람 가능 (쓰기 권한 없음)
+
+방법 C: 스크린샷 캡처 후 GitHub에 업로드 (현재 방식)
+  - 현재 이 방식 사용 중
+
+══════════════════════════════════════════════════════════
+
+7. 면접 대비 핵심 질문 & 답변 포인트
+
+Q. Prometheus와 CloudWatch의 차이는?
+A. Prometheus는 앱이 직접 노출하는 메트릭을 Pull 방식으로 수집하는 오픈소스 TSDB.
+   CloudWatch는 AWS에서 제공하는 완전 관리형 로그·메트릭 서비스.
+   이 프로젝트에서는 앱 레벨 커스텀 메트릭은 Prometheus로,
+   인프라·시스템 로그는 CloudWatch로 분리하는 구조를 설계했습니다.
+
+Q. Grafana를 선택한 이유?
+A. Prometheus와의 네이티브 연동, Alert Rule + Contact Point(Telegram) 구성이 쉬움.
+   또한 CloudWatch, Loki 등 다양한 데이터소스를 단일 UI에서 통합 조회 가능.
+
+Q. Alert이 울리지 않으면 어떻게 탐지하나?
+A. Grafana Alert 자체가 정상 동작하는지를 확인하기 위해:
+   (1) app_uptime_seconds 메트릭으로 앱 구동 여부 기본 확인
+   (2) webhook_received_total이 일정 시간 증가 없으면 Alert 발생
+   (3) Telegram Contact Point 테스트 기능으로 주기적으로 확인
+
+Q. 이 모니터링 스택의 비용은?
+A. Prometheus + Grafana는 EC2 위 Docker 컨테이너로 운영 → 추가 비용 없음.
+   CloudWatch Logs 기본 5GB/월 무료 → 현재 수준에서 실질 과금 없음.
+
+══════════════════════════════════════════════════════════
+
+8. 운영 접속 정보 (로컬 기록용 — 외부 공개 금지)
+
+Grafana URL     : http://<EC2-PUBLIC-IP>:3000
+기본 계정       : admin / admin123! (docker-compose 설정 기준, 실제 변경 여부 확인)
+Prometheus URL  : http://<EC2-PUBLIC-IP>:9090
+FastAPI URL     : http://<EC2-PUBLIC-IP>:8000
+
+주의: 보안그룹에서 3000, 9090 포트가 열려 있어야 접속 가능.
+      포트폴리오 공개용으로 외부 공개 시 Anonymous Auth 설정 후 3000만 오픈 권장.
+
+══════════════════════════════════════════════════════════
+
+9. EC2 + systemd 방식이 합리적인가? — 비용 절감 대안 비교
+
+현재 구조 (EC2 t3.small + systemd):
+  장점: 24시간 상시 대기, Webhook 즉시 수신, 상태 유지(SQLite), 모니터링 스택 함께 운영
+  단점: 인스턴스가 켜져 있는 만큼 고정 비용 발생 (~$26/월, 약 35,000원)
+
+비용 절감 대안 비교:
+방식                  | 예상 비용   | 포트폴리오 관점
+─────────────────────┼────────────┼──────────────────────────────────────────────
+EC2 t3.small (현재)  | ~$26/월    | ✅ 증빙 인프라 모두 운영 가능
+EC2 t3.micro         | ~$8/월     | ⚠️ 메모리 1GB → 모니터링 스택 불안정
+Lambda (이벤트형)    | ~$0        | ❌ 상태 유지 불가, 모니터링 어려움
+Fargate (컨테이너)   | ~$15/월    | ⚠️ EC2보다 포트폴리오 증빙이 덜 직관적
+EC2 t3.nano + swap   | ~$4/월     | ⚠️ 성능 리스크 있음
+
+결론: 포트폴리오·취업 목적에서는 EC2 + systemd가 가장 합리적.
+      "실제 서버를 운영한다"는 경험 자체가 증빙 가치이고,
+      systemd·Prometheus·Grafana·CloudWatch를 모두 올릴 수 있는 건 EC2뿐.
+      비용만 줄이려면 t3.micro 다운그레이드 가능하나 모니터링 스택 안정성이 떨어짐.
