@@ -27,6 +27,13 @@ TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance 
 - [전체 포트폴리오 개요 (운영 증빙 포함)](./PORTFOLIO_README.md)
 - [PSAR 봇 기술 상세 (구현·배포·메트릭)](./psar_rsi_bot/README.md)
 
+## System Architecture
+
+![AWS Architecture](psar_rsi_bot/docs/Architecture/psar_portfolio_aws_architecture.png)
+
+> TradingView Webhook → AWS EC2 FastAPI → Binance Futures 주문 실행 / Telegram 알림  
+> Prometheus + Grafana 모니터링 스택, GitHub Actions CI/CD, SSM·CloudWatch·S3 연동
+
 ## Tech Stack
 - Cloud: `AWS EC2`, `IAM`, `CloudWatch Logs`
 - Runtime: `Python`, `FastAPI`, `systemd`

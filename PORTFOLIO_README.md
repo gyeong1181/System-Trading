@@ -98,6 +98,12 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 
 ## 운영 증빙
 
+### AWS Architecture Diagram (diagram-as-code)
+> 실제 운영 중인 시스템 구조를 AWS 공식 아이콘 기반으로 자동 생성한 다이어그램입니다.  
+> 생성 스크립트: [`psar_rsi_bot/docs/Architecture/generate_aws_diagram.py`](psar_rsi_bot/docs/Architecture/generate_aws_diagram.py)
+
+![AWS Architecture](psar_rsi_bot/docs/Architecture/psar_portfolio_aws_architecture.png)
+
 ### Final Portfolio Architecture
 ![Portfolio Architecture](psar_rsi_bot/docs/Architecture/portfolio_architecture_final.png)
 

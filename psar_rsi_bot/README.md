@@ -54,6 +54,9 @@ flowchart LR
     GHA[GitHub Actions] --> API
 ```
 
+### AWS 공식 아키텍처 다이어그램
+![AWS Architecture](docs/Architecture/psar_portfolio_aws_architecture.png)
+
 보조 이미지:
 - ![Portfolio Architecture Final](docs/Architecture/portfolio_architecture_final.png)
 - ![Architecture](docs/Architecture/Architecture.png)
