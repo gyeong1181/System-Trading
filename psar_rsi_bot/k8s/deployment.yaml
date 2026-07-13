@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: psar-trading-bot
+  namespace: trading
+  labels:
+    app: psar-trading-bot
+    tier: application
+    version: "1.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: psar-trading-bot
+  template:
+    metadata:
+      labels:
+        app: psar-trading-bot
+      annotations:
+        # Prometheus auto-scrape
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: psar-trading-bot
+          image: psar-trading-bot:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: trading-config
+            - secretRef:
+                name: trading-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+            - name: reports
+              mountPath: /app/reports
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: reports
+          emptyDir: {}
+      restartPolicy: Always

@@ -252,3 +252,20 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 - Guide: [psar_rsi_bot/docs/nightly_s3_backup.md](psar_rsi_bot/docs/nightly_s3_backup.md)
 
 이 백업은 `.env`, `terraform.tfvars`, SSM 로컬 파일 같은 민감 정보를 기본적으로 제외하고, 코드와 로그만 별도 보관하도록 설계했습니다.
+
+---
+
+## 📦 서버 비용 최적화 기록 (2026-06-15)
+
+**조치 사항**: 자동매매 EC2 서버 비용 최적화를 위해 아래 조치를 실행하였음.
+
+| 항목 | 내용 |
+|---|---|
+| 기존 상태 | EC2 중지(Stop) 상태 → 월 1.7만원 청구 중 |
+| 원인 | EBS 스토리지 + Elastic IP 미사용 과금 |
+| 조치 | AMI 백업(system-trading-backup-20260615) → EC2 완전 종료(Terminate) → Elastic IP 릴리스 |
+| 결과 | 월 1~2천원 수준으로 감소 |
+
+**재운용 시**: AMI에서 새 인스턴스 시작 → 기존 환경 그대로 복원 가능
+
+**장기 계획**: Lambda + API Gateway 전환, SQLite → DynamoDB, Prometheus → CloudWatch 교체 (취업 후 리팩터링 예정)

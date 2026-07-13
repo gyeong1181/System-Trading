@@ -1,0 +1,72 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# 네임스페이스 (kubectl create namespace trading 필요)
+namespace: trading
+
+# 기본 리소스
+resources:
+  - deployment.yaml
+  - statefulset.yaml
+  - service.yaml
+  - configmap.yaml
+  - secrets.yaml
+
+# 공통 레이블
+commonLabels:
+  project: psar-trading-system
+  managed-by: kustomize
+
+# 이미지 태그 관리 (kustomize edit set image 명령으로 업데이트)
+images:
+  - name: psar-trading-bot
+    newTag: latest
+
+# ──────────────────────────────────────────────
+# dev / prod 환경 분리 사용법
+# ──────────────────────────────────────────────
+#
+# 기본 (이 파일 그대로):
+#   kubectl apply -k k8s/
+#
+# dev 오버레이 (replicas=1, 리소스 최소화):
+#   kubectl apply -k k8s/overlays/dev
+#
+# prod 오버레이 (replicas=2, 리소스 확장, Slack alert 활성화):
+#   kubectl apply -k k8s/overlays/prod
+#
+# overlays/dev/kustomization.yaml 예시:
+# ─────────────────────────────────
+#   apiVersion: kustomize.config.k8s.io/v1beta1
+#   kind: Kustomization
+#   resources:
+#     - ../../
+#   patches:
+#     - path: patch-dev.yaml
+#       target:
+#         kind: Deployment
+#         name: psar-trading-bot
+#
+# overlays/dev/patch-dev.yaml 예시:
+# ──────────────────────────────────
+#   - op: replace
+#     path: /spec/replicas
+#     value: 1
+#   - op: replace
+#     path: /spec/template/spec/containers/0/resources/limits/cpu
+#     value: "200m"
+#   - op: replace
+#     path: /spec/template/spec/containers/0/resources/limits/memory
+#     value: "256Mi"
+#
+# overlays/prod/patch-prod.yaml 예시:
+# ─────────────────────────────────────
+#   - op: replace
+#     path: /spec/replicas
+#     value: 2
+#   - op: replace
+#     path: /spec/template/spec/containers/0/resources/limits/cpu
+#     value: "1000m"
+#   - op: replace
+#     path: /spec/template/spec/containers/0/resources/limits/memory
+#     value: "1Gi"
