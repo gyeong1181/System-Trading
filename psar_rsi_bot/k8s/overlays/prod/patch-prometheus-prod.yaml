@@ -1,0 +1,4 @@
+# prod: Prometheus 스토리지 확장, retention 30일
+- op: replace
+  path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+  value: "20Gi"

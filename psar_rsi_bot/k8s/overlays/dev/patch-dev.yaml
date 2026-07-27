@@ -1,0 +1,29 @@
+# dev 환경: replicas 최소, 리소스 축소 (Minikube 부담 감소)
+- op: replace
+  path: /spec/replicas
+  value: 1
+
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/cpu
+  value: "50m"
+
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/memory
+  value: "64Mi"
+
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/cpu
+  value: "200m"
+
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/memory
+  value: "256Mi"
+
+# dev에서는 TRADING_MODE를 PAPER로 오버라이드 (실거래 방지)
+- op: add
+  path: /spec/template/spec/containers/0/env
+  value:
+    - name: TRADING_MODE
+      value: "PAPER"
+    - name: LOG_LEVEL
+      value: "DEBUG"

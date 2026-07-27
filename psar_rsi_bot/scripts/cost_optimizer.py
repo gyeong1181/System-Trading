@@ -5,9 +5,13 @@ CloudWatch 기반 EC2 비용 최적화 자동 분석 스크립트.
 주 1회 cron 실행 예시:
     0 9 * * 1 EC2_INSTANCE_ID=i-xxx python3 /app/scripts/cost_optimizer.py
 
+데모 모드 (AWS 자격증명 없이 실행):
+    python3 cost_optimizer.py --demo
+    python3 cost_optimizer.py --demo --instance-type t3.small
+
 이 스크립트는 분석·제안만 합니다. 실제 변경은 수동 승인 후 진행하세요.
 
-필수 환경변수:
+필수 환경변수 (--demo 없을 때):
     EC2_INSTANCE_ID   - 분석 대상 인스턴스 ID
     AWS_DEFAULT_REGION - 리전 (기본: ap-northeast-2)
 
@@ -16,6 +20,7 @@ CloudWatch 기반 EC2 비용 최적화 자동 분석 스크립트.
     REPORT_DIR         - HTML 리포트 저장 경로 (기본: ./reports)
 """
 
+import argparse
 import os
 import json
 import logging
@@ -370,14 +375,89 @@ def send_slack_notification(report: dict, webhook_url: str) -> None:
 
 
 # ──────────────────────────────────────────────
+# Demo mode (AWS 자격증명 없이 실행)
+# ──────────────────────────────────────────────
+
+def _demo_metrics() -> dict:
+    """포트폴리오 시연용 샘플 메트릭 (실제 CloudWatch 호출 없음)."""
+    return {
+        "avg_cpu": 8.4,
+        "max_cpu": 34.2,
+        "avg_net_in_bytes": 1_024 * 512,  # 512 KB/s
+        "datapoints_count": 30,
+    }
+
+
+def run_demo(instance_type: str = "t3.small") -> dict:
+    log.info("=" * 60)
+    log.info("[DEMO MODE] AWS 자격증명 없이 샘플 데이터로 실행")
+    log.info("인스턴스 타입: %s | 분석 기간: 지난 %d일 (샘플)", instance_type, LOOKBACK_DAYS)
+    log.info("=" * 60)
+
+    metrics = _demo_metrics()
+    log.info(
+        "샘플 메트릭 — 평균 CPU: %.1f%% | 최대 CPU: %.1f%%",
+        metrics["avg_cpu"], metrics["max_cpu"],
+    )
+
+    safety = evaluate_safety(metrics["avg_cpu"], metrics["max_cpu"], metrics["avg_net_in_bytes"])
+    log.info("안전성: %s", "✅ 다운사이즈 안전" if safety["safe_to_downsize"] else "⚠️ 주의 필요")
+
+    options = generate_options(instance_type)
+    for opt in options:
+        log.info(
+            "  [옵션 %d] %s — $%.2f/월 절감 (%.1f%%) | 위험도: %s",
+            opt["rank"], opt["option"], opt["saving_usd"], opt["saving_pct"], opt["risk_level"],
+        )
+
+    report = {
+        "generated_at": datetime.now().isoformat(),
+        "instance_id": "i-DEMO-XXXXXXXXXXXXXXXXX",
+        "region": REGION,
+        "lookback_days": LOOKBACK_DAYS,
+        "current_type": instance_type,
+        "metrics": metrics,
+        "safety": safety,
+        "options": options,
+        "demo_mode": True,
+    }
+
+    html_path = save_html_report(report)
+    save_json_report(report)
+
+    log.info("=" * 60)
+    log.info("[DEMO] 완료 — HTML 리포트: %s", html_path)
+    log.info("실제 실행: EC2_INSTANCE_ID=i-xxx python cost_optimizer.py")
+    log.info("=" * 60)
+    return report
+
+
+# ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
 
 def main() -> dict:
+    parser = argparse.ArgumentParser(description="EC2 비용 최적화 분석 스크립트")
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="AWS 자격증명 없이 샘플 데이터로 실행 (포트폴리오 시연용)",
+    )
+    parser.add_argument(
+        "--instance-type",
+        default="t3.small",
+        help="데모 모드에서 사용할 인스턴스 타입 (기본: t3.small)",
+    )
+    args = parser.parse_args()
+
+    if args.demo:
+        return run_demo(instance_type=args.instance_type)
+
     if not INSTANCE_ID:
         raise ValueError(
             "EC2_INSTANCE_ID 환경변수가 설정되지 않았습니다.\n"
-            "사용법: EC2_INSTANCE_ID=i-xxxxxxxxxxxxxxxxx python cost_optimizer.py"
+            "사용법: EC2_INSTANCE_ID=i-xxxxxxxxxxxxxxxxx python cost_optimizer.py\n"
+            "데모:   python cost_optimizer.py --demo"
         )
 
     log.info("=" * 60)
@@ -416,7 +496,6 @@ def main() -> dict:
             opt["rank"], opt["option"], opt["saving_usd"], opt["saving_pct"], opt["risk_level"],
         )
 
-    # 보고서 데이터 조립
     report = {
         "generated_at": datetime.now().isoformat(),
         "instance_id": INSTANCE_ID,

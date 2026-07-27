@@ -1,0 +1,4 @@
+# dev: Prometheus 스토리지 최소화
+- op: replace
+  path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+  value: "1Gi"
