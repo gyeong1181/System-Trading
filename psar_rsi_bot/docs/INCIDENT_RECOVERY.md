@@ -13,20 +13,23 @@
 
 **Symptom**: `RestartSec` 설정 없음 → 프로세스 패닉 시 무한 루프 발생  
 **Root Cause**: `/etc/systemd/system/psar_rsi_bot.service` 에 재시작 대기 시간 누락  
-**Solution Applied**: `RestartSec=3min 12sec` (192초) 적용 → 백오프 후 자동 재시작  
+**Solution Applied**: `RestartSec=10` 적용 → 10초 대기 후 자동 재시작  
 **Status**: Auto-repair ✅ (수동 개입 0)
 
 ```ini
 # /etc/systemd/system/psar_rsi_bot.service
 [Service]
 Restart=on-failure
-RestartSec=192
-StartLimitIntervalSec=600
+RestartSec=10
+StartLimitIntervalSec=60
 StartLimitBurst=3
 ```
 
-**결과**: 패닉 발생 시 3분 12초 대기 → 자동 재시작 → 정상 복구.  
-연속 3회 실패 시에만 수동 개입 필요 (StartLimitBurst=3).
+**결과**: 패닉 발생 시 10초 대기 → 자동 재시작 → 정상 복구.  
+60초 내 3번 연속 실패 시 재시작 포기 → 수동 개입 필요.
+
+> RestartSec 설계 기준: FastAPI 앱 기동 시간(~5초) + 여유 5초 = 10초.  
+> 너무 짧으면 크래시 루프 위험, 너무 길면 자동매매 공백 발생.
 
 ---
 
