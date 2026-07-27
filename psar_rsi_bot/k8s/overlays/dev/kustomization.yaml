@@ -2,22 +2,41 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # dev: 로컬 개발 / Minikube 환경
-# kubectl apply -k k8s/overlays/dev
+# 실행: kubectl apply -k psar_rsi_bot/k8s/overlays/dev
+#
+# resources: - ../../  →  psar_rsi_bot/k8s/ (base kustomization.yaml) 를 참조
+# kustomize v4+에서 bases: 는 deprecated → resources: 로 base 참조가 표준
 
 resources:
   - ../../
+
+# base에서 상속하지만 overlay에서도 명시 (명확성)
+namespace: trading
 
 namePrefix: dev-
 
 commonLabels:
   env: dev
+  tier: development
 
 patches:
+  # Deployment 패치: replicas·resources·env 오버라이드 (JSON Patch RFC 6902)
   - path: patch-dev.yaml
     target:
       kind: Deployment
       name: psar-trading-bot
+    options:
+      allowNameChange: false
+
+  # StatefulSet(Prometheus) 패치: PVC 스토리지 축소
   - path: patch-prometheus-dev.yaml
     target:
       kind: StatefulSet
       name: prometheus
+    options:
+      allowNameChange: false
+
+# 이미지 태그 (dev는 로컬 빌드 이미지 사용, Never pull)
+images:
+  - name: psar-trading-bot
+    newTag: latest

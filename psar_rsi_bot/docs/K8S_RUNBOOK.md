@@ -199,3 +199,200 @@ minikube delete
 - [ ] `curl http://$(minikube ip):30800/health` — 200 OK 응답 스크린샷
 - [ ] `kubectl describe pod ... | grep Liveness` — Probe 설정 스크린샷
 - [ ] Grafana 대시보드 접속 화면 스크린샷
+
+---
+
+## Daily Commands — 운영 중 자주 쓰는 명령어
+
+> 아래 예시의 Pod명은 실제 환경에서 `kubectl get pods -n trading` 으로 확인 후 교체하세요.  
+> 예: `dev-psar-trading-bot-7d9f4b8c6-xk2lp`
+
+---
+
+### 1. 실시간 로그 조회
+
+**설명**: 실행 중인 Pod의 로그를 스트리밍으로 출력한다. `-f` 없으면 현재까지 누적 로그만 출력.
+
+```bash
+kubectl logs -n trading -l app=psar-trading-bot -f
+# 특정 Pod 지정
+kubectl logs -n trading dev-psar-trading-bot-7d9f4b8c6-xk2lp -f
+```
+
+**출력 예시:**
+```
+2026-07-27 10:05:01 [INFO] FastAPI started on 0.0.0.0:8000
+2026-07-27 10:05:12 [INFO] Webhook received: SOLUSDT BUY
+2026-07-27 10:05:13 [INFO] Order executed: qty=0.5, price=168.2
+```
+
+**언제 쓰는지**: 오더 실행 확인, 에러 추적, 실시간 모니터링.
+
+---
+
+### 2. Pod 상태 상세 조회
+
+**설명**: Pod의 이벤트·Probe 결과·재시작 원인 등 전체 상태를 출력한다. 오류 첫 진단에 필수.
+
+```bash
+kubectl describe pod -n trading dev-psar-trading-bot-7d9f4b8c6-xk2lp
+```
+
+**출력 예시 (핵심 부분):**
+```
+Conditions:
+  Ready:          True
+Liveness:   http-get http://:8000/health  period=30s  #failure=3
+Readiness:  http-get http://:8000/health  period=10s  #failure=3
+Events:
+  Normal   Started   2m    kubelet  Started container psar-trading-bot
+  Warning  Unhealthy 30s   kubelet  Liveness probe failed: connection refused
+```
+
+**언제 쓰는지**: CrashLoopBackOff, Probe 실패, 이미지 풀 오류 원인 파악.
+
+---
+
+### 3. 배포 진행 상태 확인
+
+**설명**: `kubectl apply` 후 롤링 업데이트가 완료됐는지 블로킹 상태로 대기·출력한다.
+
+```bash
+kubectl rollout status deployment/dev-psar-trading-bot -n trading
+```
+
+**출력 예시:**
+```
+Waiting for deployment "dev-psar-trading-bot" rollout to finish: 1 of 2 updated replicas are available...
+deployment "dev-psar-trading-bot" successfully rolled out
+```
+
+**언제 쓰는지**: CI/CD 파이프라인에서 배포 성공 여부 자동 판별, 새 이미지 배포 후 확인.
+
+---
+
+### 4. 롤백 (이전 버전으로 되돌리기)
+
+**설명**: 배포가 실패하거나 장애가 발생했을 때 즉시 이전 ReplicaSet으로 되돌린다.
+
+```bash
+# 즉시 롤백
+kubectl rollout undo deployment/dev-psar-trading-bot -n trading
+
+# 특정 revision으로 롤백
+kubectl rollout history deployment/dev-psar-trading-bot -n trading
+kubectl rollout undo deployment/dev-psar-trading-bot --to-revision=2 -n trading
+```
+
+**출력 예시:**
+```
+deployment.apps/dev-psar-trading-bot rolled back
+```
+
+**언제 쓰는지**: 새 버전 배포 후 오더 실행 오류 발생, 장애 즉시 복구가 필요할 때.
+
+---
+
+### 5. Pod 내부 접근 (셸 접속)
+
+**설명**: 실행 중인 컨테이너 내부에 bash로 직접 접속한다. Docker의 `exec -it` 와 동일.
+
+```bash
+kubectl exec -it -n trading dev-psar-trading-bot-7d9f4b8c6-xk2lp -- /bin/bash
+# bash 없으면
+kubectl exec -it -n trading dev-psar-trading-bot-7d9f4b8c6-xk2lp -- /bin/sh
+```
+
+**출력 예시:**
+```
+root@dev-psar-trading-bot-7d9f4b8c6-xk2lp:/app#
+# 내부에서 확인
+ls logs/
+cat logs/trading.log | tail -20
+python -c "import webhook_server; print('OK')"
+```
+
+**언제 쓰는지**: 환경변수 확인(`env`), 파일 존재 여부, DB 연결 테스트, 의존성 검증.
+
+---
+
+### 6. 실시간 Pod 상태 모니터링
+
+**설명**: Pod 목록을 실시간으로 갱신하며 출력한다. 배포·재시작 과정을 눈으로 확인.
+
+```bash
+kubectl get pods -n trading -w
+```
+
+**출력 예시:**
+```
+NAME                                      READY   STATUS              RESTARTS   AGE
+dev-psar-trading-bot-7d9f4b8c6-xk2lp     0/1     ContainerCreating   0          3s
+dev-psar-trading-bot-7d9f4b8c6-xk2lp     1/1     Running             0          12s
+dev-prometheus-0                          1/1     Running             0          45s
+dev-grafana-0                             1/1     Running             0          45s
+```
+
+**언제 쓰는지**: `kubectl apply` 직후 Pod가 정상 기동되는지 대기, 자동복구 과정 관찰.
+
+---
+
+### 7. Pod 강제 삭제 → 자동복구 테스트
+
+**설명**: Pod를 강제로 지워서 Deployment의 자동복구(self-healing)가 작동하는지 검증한다.
+
+```bash
+kubectl delete pod -n trading dev-psar-trading-bot-7d9f4b8c6-xk2lp
+# 바로 확인 (새 Pod가 자동 생성됨)
+kubectl get pods -n trading -w
+```
+
+**출력 예시:**
+```
+pod "dev-psar-trading-bot-7d9f4b8c6-xk2lp" deleted
+# 곧바로 새 Pod 생성
+dev-psar-trading-bot-7d9f4b8c6-mn9qr     0/1     ContainerCreating   0          2s
+dev-psar-trading-bot-7d9f4b8c6-mn9qr     1/1     Running             0          11s
+```
+
+**언제 쓰는지**: "K8s가 정말 자동복구 되나?" 포트폴리오 시연·면접 데모. StatefulSet은 같은 이름으로 재생성됨.
+
+---
+
+### 8. 리소스 사용량 확인
+
+**설명**: 각 Pod의 실시간 CPU·Memory 사용량을 출력한다. Metrics Server가 필요.
+
+```bash
+# Minikube에서 Metrics Server 활성화 (최초 1회)
+minikube addons enable metrics-server
+
+# 사용량 확인
+kubectl top pods -n trading
+kubectl top nodes
+```
+
+**출력 예시:**
+```
+NAME                                    CPU(cores)   MEMORY(bytes)
+dev-psar-trading-bot-7d9f4b8c6-xk2lp   8m           94Mi
+dev-prometheus-0                        45m          210Mi
+dev-grafana-0                           12m          87Mi
+```
+
+**언제 쓰는지**: Resource limits 적절성 검증, OOMKilled 원인 파악, 비용 최적화 판단 근거.
+
+---
+
+## 명령어 빠른 참조표
+
+| 명령어 | 목적 |
+|---|---|
+| `kubectl logs -n trading -l app=X -f` | 실시간 로그 |
+| `kubectl describe pod -n trading <pod>` | 상태·이벤트 상세 |
+| `kubectl rollout status deployment/X -n trading` | 배포 완료 대기 |
+| `kubectl rollout undo deployment/X -n trading` | 즉시 롤백 |
+| `kubectl exec -it -n trading <pod> -- /bin/bash` | 컨테이너 내부 접속 |
+| `kubectl get pods -n trading -w` | 실시간 Pod 모니터링 |
+| `kubectl delete pod -n trading <pod>` | 자동복구 테스트 |
+| `kubectl top pods -n trading` | CPU·Memory 사용량 |

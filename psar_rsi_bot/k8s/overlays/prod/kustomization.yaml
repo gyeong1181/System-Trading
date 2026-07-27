@@ -2,22 +2,38 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # prod: 실제 운영 환경
-# kubectl apply -k k8s/overlays/prod
+# 실행: kubectl apply -k psar_rsi_bot/k8s/overlays/prod
+#
+# resources: - ../../  →  psar_rsi_bot/k8s/ (base kustomization.yaml) 를 참조
 
 resources:
   - ../../
+
+namespace: trading
 
 namePrefix: prod-
 
 commonLabels:
   env: prod
+  tier: production
 
 patches:
+  # Deployment 패치: replicas 2, 리소스 확장, LIVE 모드 (JSON Patch RFC 6902)
   - path: patch-prod.yaml
     target:
       kind: Deployment
       name: psar-trading-bot
+    options:
+      allowNameChange: false
+
+  # StatefulSet(Prometheus) 패치: PVC 스토리지 확장
   - path: patch-prometheus-prod.yaml
     target:
       kind: StatefulSet
       name: prometheus
+    options:
+      allowNameChange: false
+
+images:
+  - name: psar-trading-bot
+    newTag: stable
