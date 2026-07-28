@@ -1,0 +1,44 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  user-service:
+    build: ./services/user-service
+    image: msa/user-service:0.1.0
+    environment:
+      JWT_SECRET: dev-secret-change-me
+    ports: ["8001:8000"]
+
+  product-service:
+    build: ./services/product-service
+    image: msa/product-service:0.1.0
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    ports: ["8002:8000"]
+    depends_on: [redis]
+
+  order-service:
+    build: ./services/order-service
+    image: msa/order-service:0.1.0
+    environment:
+      USER_SERVICE_URL: http://user-service:8000
+      PRODUCT_SERVICE_URL: http://product-service:8000
+      PAYMENT_SERVICE_URL: http://payment-service:8000
+      NOTIFICATION_SERVICE_URL: http://notification-service:8000
+    ports: ["8003:8000"]
+    depends_on: [user-service, product-service, payment-service, notification-service]
+
+  payment-service:
+    build: ./services/payment-service
+    image: msa/payment-service:0.1.0
+    environment:
+      FAILURE_RATE: "0.0"
+      LATENCY_MS: "120"
+    ports: ["8004:8000"]
+
+  notification-service:
+    build: ./services/notification-service
+    image: msa/notification-service:0.1.0
+    ports: ["8005:8000"]

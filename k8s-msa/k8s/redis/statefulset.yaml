@@ -1,0 +1,56 @@
+# Redis: StatefulSet 선택 이유
+# - Pod 재시작 후에도 캐시 데이터 유지 (product-service 캐시 히트율 보존)
+# - 향후 Redis Sentinel/Cluster 확장 시 순번 Pod명 필요
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: msa
+  labels:
+    app: redis
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

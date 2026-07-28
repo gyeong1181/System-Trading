@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: msa
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - redis/statefulset.yaml
+  - redis/service.yaml
+  - user-service/deployment.yaml
+  - user-service/service.yaml
+  - product-service/deployment.yaml
+  - product-service/service.yaml
+  - order-service/deployment.yaml
+  - order-service/service.yaml
+  - payment-service/deployment.yaml
+  - payment-service/service.yaml
+  - notification-service/deployment.yaml
+  - notification-service/service.yaml
+
+commonLabels:
+  project: msa-on-k8s
+  managed-by: kustomize
+
+# ──────────────────────────────────────────────
+# 실행 방법
+# ──────────────────────────────────────────────
+# 1) 사전 준비 (Minikube)
+#    minikube start --memory=4096 --cpus=2
+#    & minikube docker-env --shell powershell | Invoke-Expression
+#    cd k8s-msa && .\build.ps1
+#
+# 2) Secret 실제 값 주입 (base64)
+#    kubectl create secret generic msa-secret -n msa \
+#      --from-literal=JWT_SECRET=prod-secret-change-me
+#
+# 3) 전체 배포
+#    kubectl apply -k k8s-msa/k8s/
+#
+# 4) 상태 확인
+#    kubectl get all -n msa
+#
+# 5) 접속 (Minikube)
+#    minikube service user-service -n msa    → 회원가입/로그인 (NodePort 30801)
+#    minikube service order-service -n msa   → 주문 API     (NodePort 30803)

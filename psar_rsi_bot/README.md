@@ -162,7 +162,9 @@ GitHub Push → GitHub Actions (ci.yml) → SSH rsync to EC2 → systemd restart
 → [`scripts/nightly_s3_backup.sh`](scripts/nightly_s3_backup.sh)
 
 ### Operations Docs
-- [docs/INCIDENT_RECOVERY.md](docs/INCIDENT_RECOVERY.md)
+- [docs/INCIDENT_RECOVERY.md](docs/INCIDENT_RECOVERY.md) — 장애 자동 복구 정책
+- [docs/K8S_RUNBOOK.md](docs/K8S_RUNBOOK.md) — Minikube 실행 가이드 + Daily Commands
+- [docs/K8S_ESSENTIAL.md](docs/K8S_ESSENTIAL.md) — K8s 핵심 개념 (면접 대비)
 - [docs/operations_checklist.md](docs/operations_checklist.md)
 - [docs/nightly_s3_backup.md](docs/nightly_s3_backup.md)
 

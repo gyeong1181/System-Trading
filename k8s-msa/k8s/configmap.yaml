@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: msa-config
+  namespace: msa
+data:
+  # Redis 연결 (product-service)
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  CACHE_TTL: "60"
+
+  # 서비스 내부 DNS (order-service → 각 서비스 ClusterIP DNS 자동 해석)
+  # 형식: http://<service-name>.<namespace>.svc.cluster.local:<port>
+  USER_SERVICE_URL: "http://user-service.msa.svc.cluster.local:8000"
+  PRODUCT_SERVICE_URL: "http://product-service.msa.svc.cluster.local:8000"
+  PAYMENT_SERVICE_URL: "http://payment-service.msa.svc.cluster.local:8000"
+  NOTIFICATION_SERVICE_URL: "http://notification-service.msa.svc.cluster.local:8000"
+
+  # payment-service 장애 시뮬레이션 파라미터
+  FAILURE_RATE: "0.0"
+  LATENCY_MS: "120"
