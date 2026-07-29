@@ -1,0 +1,43 @@
+# Ingress: 외부 HTTP 트래픽을 경로 기반으로 각 서비스에 라우팅
+# Minikube: minikube addons enable ingress 먼저 실행 필요
+#
+# 라우팅 규칙:
+#   /api/users/*   → user-service:8000   (회원가입/로그인)
+#   /api/orders/*  → order-service:8000  (주문 생성/조회)
+#   /api/products/* → product-service:8000 (상품 목록)
+#
+# NodePort(30801, 30803)를 쓰지 않고 단일 80 포트로 통합 진입점 제공
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: msa-ingress
+  namespace: msa
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: msa.local
+      http:
+        paths:
+          - path: /api/users(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8000
+          - path: /api/orders(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: order-service
+                port:
+                  number: 8000
+          - path: /api/products(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: product-service
+                port:
+                  number: 8000

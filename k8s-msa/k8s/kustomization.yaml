@@ -7,6 +7,7 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - secret.yaml
+  # Phase 2: 5개 MSA 서비스 + Redis
   - redis/statefulset.yaml
   - redis/service.yaml
   - user-service/deployment.yaml
@@ -19,6 +20,10 @@ resources:
   - payment-service/service.yaml
   - notification-service/deployment.yaml
   - notification-service/service.yaml
+  # Phase 3: PostgreSQL + Ingress
+  - postgres/statefulset.yaml
+  - postgres/service.yaml
+  - ingress.yaml
 
 commonLabels:
   project: msa-on-k8s
@@ -29,19 +34,25 @@ commonLabels:
 # ──────────────────────────────────────────────
 # 1) 사전 준비 (Minikube)
 #    minikube start --memory=4096 --cpus=2
+#    minikube addons enable ingress          ← Phase 3 Ingress 사용 필수
 #    & minikube docker-env --shell powershell | Invoke-Expression
 #    cd k8s-msa && .\build.ps1
 #
-# 2) Secret 실제 값 주입 (base64)
+# 2) Secret 실제 값 주입
 #    kubectl create secret generic msa-secret -n msa \
-#      --from-literal=JWT_SECRET=prod-secret-change-me
+#      --from-literal=JWT_SECRET=prod-secret-change-me \
+#      --from-literal=POSTGRES_USER=msauser \
+#      --from-literal=POSTGRES_PASSWORD=msapassword-change-me
 #
 # 3) 전체 배포
 #    kubectl apply -k k8s-msa/k8s/
 #
 # 4) 상태 확인
 #    kubectl get all -n msa
+#    kubectl get ingress -n msa
 #
-# 5) 접속 (Minikube)
-#    minikube service user-service -n msa    → 회원가입/로그인 (NodePort 30801)
-#    minikube service order-service -n msa   → 주문 API     (NodePort 30803)
+# 5) 접속
+#    (Ingress) echo "$(minikube ip) msa.local" >> /etc/hosts
+#              curl http://msa.local/api/users/health
+#    (NodePort) minikube service user-service -n msa  → 회원가입/로그인
+#               minikube service order-service -n msa → 주문 API

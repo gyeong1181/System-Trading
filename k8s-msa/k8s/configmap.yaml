@@ -16,6 +16,12 @@ data:
   PAYMENT_SERVICE_URL: "http://payment-service.msa.svc.cluster.local:8000"
   NOTIFICATION_SERVICE_URL: "http://notification-service.msa.svc.cluster.local:8000"
 
+  # PostgreSQL 연결 (Phase 3)
+  DATABASE_URL: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres.msa.svc.cluster.local:5432/msadb"
+  DB_HOST: "postgres.msa.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_NAME: "msadb"
+
   # payment-service 장애 시뮬레이션 파라미터
   FAILURE_RATE: "0.0"
   LATENCY_MS: "120"
