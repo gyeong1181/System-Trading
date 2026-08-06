@@ -72,6 +72,18 @@ kubectl get all -n msa
 kubectl get ingress -n msa
 ```
 
+## 실행 스크린샷 (Phase 3 — Minikube)
+
+**Pod 상태 확인** (`kubectl get pods -n msa`)
+
+![Pod Running](docs/screenshots/kubectl%201.jpg)
+
+**전체 리소스 + Ingress 확인** (`kubectl get all -n msa` / `kubectl get ingress -n msa`)
+
+![All Resources & Ingress](docs/screenshots/kubectl%202%2C3.jpg)
+
+> 7개 Pod 모두 `Running 1/1` · StatefulSet(postgres, redis) 정상 · Ingress IP `192.168.49.2` 배정 완료
+
 ## Roadmap
 - [x] Phase 1: Docker 이미지 5개 + compose 통합 테스트
 - [x] Phase 2: Minikube 배포 (Deployment / Service / ConfigMap / Secret / Probe)
