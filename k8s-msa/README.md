@@ -72,17 +72,47 @@ kubectl get all -n msa
 kubectl get ingress -n msa
 ```
 
-## 실행 스크린샷 (Phase 3 — Minikube)
+## 실행 스크린샷
+
+### Phase 3 — Minikube 배포 검증
 
 **Pod 상태 확인** (`kubectl get pods -n msa`)
 
-![Pod Running](docs/screenshots/kubectl%201.jpg)
+![Pod Running](docs/screenshots/phase3-pods-running.jpg)
 
 **전체 리소스 + Ingress 확인** (`kubectl get all -n msa` / `kubectl get ingress -n msa`)
 
-![All Resources & Ingress](docs/screenshots/kubectl%202%2C3.jpg)
+![All Resources & Ingress](docs/screenshots/phase3-all-resources-ingress.jpg)
 
 > 7개 Pod 모두 `Running 1/1` · StatefulSet(postgres, redis) 정상 · Ingress IP `192.168.49.2` 배정 완료
+
+### Phase 4 — Terraform EKS Plan
+
+**`terraform plan` — AWS 리소스 68개 생성 계획 확인 (실제 배포 없이 IaC 설계 증명)**
+
+![Terraform Plan](docs/screenshots/phase4-terraform-plan.jpg)
+
+> `Plan: 68 to add, 0 to change, 0 to destroy` · cluster_name=msa-eks-cluster · ECR 5개 서비스 URL 출력 확인
+
+### Phase 5 — Prometheus + Grafana + HPA
+
+**Prometheus `up` 쿼리 — MSA 5개 서비스 + Prometheus 자신 메트릭 수집 확인**
+
+![Prometheus Up Query](docs/screenshots/phase5-prometheus-up.jpg)
+
+**Prometheus Targets — msa-pods 5/5 UP**
+
+![Prometheus Targets](docs/screenshots/phase5-prometheus-targets.jpg)
+
+**Grafana 대시보드 — Prometheus 데이터소스 자동 연결 확인**
+
+![Grafana Dashboard](docs/screenshots/phase5-grafana.jpg)
+
+**HPA 상태 — payment-service(max4) + order-service(max3) CPU 70% 자동 확장**
+
+![HPA Status](docs/screenshots/phase5-hpa.jpg)
+
+> msa-pods `5/5 UP` · Scrape 주기 15s · HPA 2개 생성 완료
 
 ## Terraform — AWS EKS 구성 (Phase 4)
 
