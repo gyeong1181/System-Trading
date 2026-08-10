@@ -84,9 +84,41 @@ kubectl get ingress -n msa
 
 > 7개 Pod 모두 `Running 1/1` · StatefulSet(postgres, redis) 정상 · Ingress IP `192.168.49.2` 배정 완료
 
+## Terraform — AWS EKS 구성 (Phase 4)
+
+```
+terraform/
+├── versions.tf    # Terraform >= 1.6, AWS provider ~> 5.0
+├── variables.tf   # 리전(서울), 클러스터명, 노드 스펙, CIDR
+├── main.tf        # VPC(3-AZ) + EKS 클러스터 + 관리형 노드그룹
+├── ecr.tf         # 5개 서비스 ECR 리포지토리 + 이미지 보관 정책
+└── outputs.tf     # 클러스터 엔드포인트, ECR URL, kubeconfig 명령어
+```
+
+```powershell
+# 1. 초기화 (모듈 다운로드)
+cd terraform
+terraform init
+
+# 2. 변경사항 미리 확인 (실제 AWS 리소스 생성 안 함)
+terraform plan
+
+# 3. 실제 배포 (AWS 비용 발생 — 포트폴리오는 plan까지만 권장)
+terraform apply
+
+# 4. kubectl EKS 연결
+aws eks update-kubeconfig --region ap-northeast-2 --name msa-eks-cluster
+
+# 5. 기존 K8s 매니페스트 그대로 배포
+kubectl apply -k k8s/
+```
+
+**EKS 예상 비용** (실제 배포 시): 클러스터 ~$0.10/h + t3.medium 2대 ~$0.09/h × 2 = 약 **$200/월**  
+포트폴리오 용도는 `terraform plan` 결과 스크린샷만으로 충분.
+
 ## Roadmap
 - [x] Phase 1: Docker 이미지 5개 + compose 통합 테스트
 - [x] Phase 2: Minikube 배포 (Deployment / Service / ConfigMap / Secret / Probe)
 - [x] Phase 3: PostgreSQL StatefulSet + PVC, Ingress (경로 기반 라우팅)
-- [ ] Phase 4: EKS (Terraform) + ECR + LoadBalancer
+- [x] Phase 4: EKS (Terraform IaC) + ECR + 노드그룹 구성
 - [ ] Phase 5: Prometheus + Grafana + HPA 부하 데모
