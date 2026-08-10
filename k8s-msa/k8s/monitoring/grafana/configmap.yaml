@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus.monitoring.svc.cluster.local:9090
+        isDefault: true
+        editable: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: msa-dashboards
+        folder: MSA
+        type: file
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-msa
+  namespace: monitoring
+data:
+  msa-overview.json: |
+    {
+      "title": "MSA Overview",
+      "uid": "msa-overview",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Pod CPU Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [{
+            "expr": "rate(container_cpu_usage_seconds_total{namespace=\"msa\"}[5m]) * 100",
+            "legendFormat": "{{pod}}"
+          }]
+        },
+        {
+          "id": 2,
+          "title": "Pod Memory Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [{
+            "expr": "container_memory_working_set_bytes{namespace=\"msa\"} / 1024 / 1024",
+            "legendFormat": "{{pod}} (MB)"
+          }]
+        },
+        {
+          "id": 3,
+          "title": "Running Pods",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+          "targets": [{
+            "expr": "count(kube_pod_status_phase{namespace=\"msa\", phase=\"Running\"})"
+          }]
+        },
+        {
+          "id": 4,
+          "title": "HPA Replicas (payment-service)",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
+          "targets": [{
+            "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"msa\",horizontalpodautoscaler=\"payment-hpa\"}"
+          }]
+        }
+      ],
+      "schemaVersion": 38,
+      "version": 1
+    }

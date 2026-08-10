@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - prometheus/configmap.yaml
+  - prometheus/deployment.yaml
+  - prometheus/service.yaml
+  - grafana/configmap.yaml
+  - grafana/deployment.yaml
+  - grafana/service.yaml
+
+commonLabels:
+  project: msa-on-k8s
+  component: monitoring
+
+# 배포: kubectl apply -k k8s/monitoring/
+# Prometheus UI: minikube service prometheus -n monitoring
+# Grafana:       minikube service grafana -n monitoring  (admin/admin)

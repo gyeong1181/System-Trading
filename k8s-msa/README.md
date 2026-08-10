@@ -116,9 +116,47 @@ kubectl apply -k k8s/
 **EKS 예상 비용** (실제 배포 시): 클러스터 ~$0.10/h + t3.medium 2대 ~$0.09/h × 2 = 약 **$200/월**  
 포트폴리오 용도는 `terraform plan` 결과 스크린샷만으로 충분.
 
+## Prometheus + Grafana + HPA (Phase 5)
+
+```
+k8s/
+├── hpa.yaml                      # payment-service(max 4), order-service(max 3) — CPU 70%
+└── monitoring/
+    ├── kustomization.yaml
+    ├── namespace.yaml             # monitoring 네임스페이스
+    ├── prometheus/
+    │   ├── configmap.yaml        # scrape config — msa 네임스페이스 파드 자동 탐색
+    │   ├── deployment.yaml       # prom/prometheus:v2.51.0 + RBAC
+    │   └── service.yaml          # NodePort 30900
+    └── grafana/
+        ├── configmap.yaml        # Prometheus 데이터소스 + MSA Overview 대시보드
+        ├── deployment.yaml       # grafana/grafana:10.4.0
+        └── service.yaml          # NodePort 30300
+```
+
+```powershell
+# metrics-server 활성화 (HPA 작동 필수)
+minikube addons enable metrics-server
+
+# 모니터링 스택 배포
+kubectl apply -k k8s/monitoring/
+
+# HPA 포함 전체 재배포
+kubectl apply -k k8s/
+
+# Prometheus UI 접근
+minikube service prometheus -n monitoring
+
+# Grafana 대시보드 접근 (admin / admin)
+minikube service grafana -n monitoring
+
+# HPA 상태 확인
+kubectl get hpa -n msa
+```
+
 ## Roadmap
 - [x] Phase 1: Docker 이미지 5개 + compose 통합 테스트
 - [x] Phase 2: Minikube 배포 (Deployment / Service / ConfigMap / Secret / Probe)
 - [x] Phase 3: PostgreSQL StatefulSet + PVC, Ingress (경로 기반 라우팅)
 - [x] Phase 4: EKS (Terraform IaC) + ECR + 노드그룹 구성
-- [ ] Phase 5: Prometheus + Grafana + HPA 부하 데모
+- [x] Phase 5: Prometheus + Grafana 모니터링 + HPA 자동 확장

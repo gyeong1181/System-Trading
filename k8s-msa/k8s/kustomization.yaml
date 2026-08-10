@@ -24,6 +24,8 @@ resources:
   - postgres/statefulset.yaml
   - postgres/service.yaml
   - ingress.yaml
+  # Phase 5: HPA (metrics-server 필요: minikube addons enable metrics-server)
+  - hpa.yaml
 
 commonLabels:
   project: msa-on-k8s
