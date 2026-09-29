@@ -89,3 +89,5 @@ FastAPI 기반 MSA를 Minikube에서 배포·검증하고 Prometheus/Grafana/HPA
 ## Contact
 
 - Email: `gyeong1181@naver.com`
+- Email: `gyeong181@naver.com`
+- Email: `gyeong1181@gmail.com`

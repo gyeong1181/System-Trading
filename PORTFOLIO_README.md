@@ -245,6 +245,8 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 ## Contact
 
 - Email: `gyeong1181@naver.com`
+- Email: `gyeong181@naver.com`
+- Email: `gyeong1181@gmail.com`
 
 ---
 
