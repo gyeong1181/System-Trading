@@ -1,6 +1,11 @@
 # msa-on-k8s
 
-FastAPI 기반 5개 마이크로서비스를 Docker -> minikube -> AWS EKS 순으로 배포하는 프로젝트.
+FastAPI 기반 5개 마이크로서비스를 Docker Compose와 Kubernetes(Minikube)에 배포하고, Terraform으로 AWS VPC/EKS/ECR 구성을 작성해 `plan`까지 검증한 학습 프로젝트입니다.
+
+- 수행 기간: 2026-07-27 ~ 2026-08-10
+- 실제 실행 범위: Docker Compose, Minikube 로컬 배포, 모니터링/HPA 검증
+- AWS 범위: Terraform 구성 작성 및 `terraform plan` 검증
+- 미수행 범위: AWS EKS `apply`와 클라우드 클러스터 배포·운영
 
 ## Services
 
@@ -114,7 +119,7 @@ kubectl get ingress -n msa
 
 > msa-pods `5/5 UP` · Scrape 주기 15s · HPA 2개 생성 완료
 
-## Terraform — AWS EKS 구성 (Phase 4)
+## Terraform — AWS EKS 구성 작성 및 plan 검증 (Phase 4)
 
 ```
 terraform/
@@ -133,18 +138,17 @@ terraform init
 # 2. 변경사항 미리 확인 (실제 AWS 리소스 생성 안 함)
 terraform plan
 
-# 3. 실제 배포 (AWS 비용 발생 — 포트폴리오는 plan까지만 권장)
+# 3. 참고용 apply 명령 (이 프로젝트에서는 실행하지 않음)
 terraform apply
 
-# 4. kubectl EKS 연결
+# 4. 참고용 EKS 연결 명령 (실행하지 않음)
 aws eks update-kubeconfig --region ap-northeast-2 --name msa-eks-cluster
 
-# 5. 기존 K8s 매니페스트 그대로 배포
+# 5. 참고용 매니페스트 배포 명령 (EKS에서는 실행하지 않음)
 kubectl apply -k k8s/
 ```
 
-**EKS 예상 비용** (실제 배포 시): 클러스터 ~$0.10/h + t3.medium 2대 ~$0.09/h × 2 = 약 **$200/월**  
-포트폴리오 용도는 `terraform plan` 결과 스크린샷만으로 충분.
+> 위 3~5번은 구성의 다음 단계를 보여주는 참고 명령입니다. 실제 경험으로 주장하는 범위는 `terraform plan`까지입니다.
 
 ## Prometheus + Grafana + HPA (Phase 5)
 
@@ -188,5 +192,15 @@ kubectl get hpa -n msa
 - [x] Phase 1: Docker 이미지 5개 + compose 통합 테스트
 - [x] Phase 2: Minikube 배포 (Deployment / Service / ConfigMap / Secret / Probe)
 - [x] Phase 3: PostgreSQL StatefulSet + PVC, Ingress (경로 기반 라우팅)
-- [x] Phase 4: EKS (Terraform IaC) + ECR + 노드그룹 구성
+- [x] Phase 4: VPC/EKS/ECR/관리형 노드그룹 Terraform 구성 작성 및 plan 검증
 - [x] Phase 5: Prometheus + Grafana 모니터링 + HPA 자동 확장
+- [ ] 실제 AWS EKS apply 및 운영 (수행하지 않음)
+
+## 포트폴리오 표현 기준
+
+- 사용 가능: “Kubernetes(Minikube) 기반 배포 검증”
+- 사용 가능: “Deployment, StatefulSet, Service, ConfigMap, Probe, Resource Limit 구성”
+- 사용 가능: “Terraform 기반 VPC/EKS/ECR 구성 작성 및 plan 검증”
+- 사용 불가: 실제 AWS 클러스터의 배포·운영을 완료한 것으로 읽히는 표현
+
+Kustomize dev/prod overlay 경험은 이 MSA 디렉터리가 아니라 [`../psar_rsi_bot/k8s/overlays/`](../psar_rsi_bot/k8s/overlays/)의 로컬 매니페스트에서 확인할 수 있습니다. 두 경험 모두 실제 클라우드 EKS 운영으로 확대 해석하지 않습니다.

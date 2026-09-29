@@ -146,9 +146,16 @@ GHCR private package를 쓸 경우:
 - `trading-env-sync.service`가 실행될 때 `docker login ghcr.io`를 자동 수행
 - 가장 빠른 대안은 GitHub Container package를 `public`으로 전환하는 것
 
-## 현재 상태
-- Terraform `plan` 기준 신규 리소스 7개 생성 계획 검증 완료
-- 현재 구성은 기존 수동 운영 서버를 대체하는 것이 아니라, 재현 가능한 신규 인프라를 코드로 만드는 단계
+## 실제 수행 범위와 현재 상태
+
+- Oregon(`us-west-2`) 실험에서 Terraform `apply`를 실제 수행
+- EC2, IAM, Security Group, Elastic IP 생성 확인
+- `user_data` 기반 Docker/Docker Compose 부트스트랩과 멀티 컨테이너 기동 시도
+- cloud-init 실패, Amazon Linux 2023 패키지 충돌, 서비스 기동, GHCR private image 인증, SSH 허용 CIDR 불일치를 단계적으로 진단
+- 최종적으로 Binance Futures의 Oregon HTTP 451 지역 제약을 확인해 PSAR 완전 이전을 중단
+- 서울 PSAR 운영 환경은 systemd 기반으로 유지하고, Oregon은 외부 OKX 전략 실험 범위로 분리
+
+이 디렉터리는 “완전한 Oregon 마이그레이션”이나 “멀티리전 프로덕션 운영”의 증거가 아닙니다. Terraform 리소스 생성과 런타임 부트스트랩을 실제로 시도하고, 실패 지점과 외부 제약을 분리한 경험을 담습니다.
 
 ## 실무에서 왜 중요한가
 - 수동으로 만들던 인프라를 코드로 재현 가능하게 만듭니다.

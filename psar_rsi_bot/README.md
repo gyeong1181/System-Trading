@@ -1,215 +1,136 @@
-# System-Trading | Automated Crypto Trading on AWS EC2
+# PSAR Webhook Executor | AWS EC2 운영 프로젝트
 
-> TradingView Webhook → FastAPI Validator → Binance Futures Live Execution  
-> Production on AWS EC2 (Seoul) · Live since 2024.04 · 3+ months runtime · 0% redeployment failure
+> TradingView Webhook → FastAPI 검증 → Binance Futures 주문 실행
+> AWS EC2 서울 리전 · systemd 운영 · 최초 배포 2025-12-22
 
----
+자동매매는 도메인일 뿐, 이 프로젝트의 핵심은 AWS/Linux 운영, 배포 자동화, 관측, 장애 대응과 인프라 실험입니다. 2026-09 기준 전체 프로젝트 경험은 약 9개월이며, 이는 특정 프로세스의 연속 가동 기간을 뜻하지 않습니다.
 
 ## Quick Overview
 
-| | |
+| 항목 | 범위 |
 |---|---|
-| **What** | TradingView Webhook 신호 수신 → FastAPI 검증 → Binance Futures 주문 자동 실행 |
-| **Where** | AWS EC2 t3.small (Seoul Region, 24/7) |
-| **Status** | Live · 0% redeployment failure · avg 2m 12s incident resolution |
-| **Scale** | SOLUSDT 단일 심볼 운용 · 환경변수 변경만으로 BTCUSDT 재활성화 가능 |
-
-**Why this project?**  
-단순 자동매매 봇 구현이 목적이 아닙니다. Webhook 수신부터 주문 실행·모니터링·자동 복구·비용 최적화까지의 전체 운영 파이프라인을 직접 설계·운영하며, 클라우드/DevOps 실무 역량을 "실제 운영 증빙"으로 보여주기 위한 포트폴리오 프로젝트입니다.
-
----
+| 서비스 | TradingView 신호를 검증하고 Binance Futures 주문을 실행하는 FastAPI Webhook Executor |
+| 서울 환경 | AWS EC2 + systemd 기반 운영 환경 |
+| 배포 | GitHub Actions → SSH/rsync → `daemon-reload` / service restart |
+| 관측 | Prometheus, Grafana, CloudWatch Logs, Telegram |
+| 컨테이너 | 주요 실제 사용은 Oregon 이전 실험의 Docker Compose 스택 |
+| Kubernetes | Minikube 로컬 배포 검증; 실제 EKS apply·운영 없음 |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    TV[TradingView Alert] -->|Webhook POST| API[FastAPI\n/tv/webhook]
-    API -->|Secret · Symbol · Timeframe\nValidation| VALID{Validator}
-    VALID -->|Pass| DB[(SQLite\nsignals / orders)]
-    VALID -->|Fail| LOG[CloudWatch Logs]
+    TV[TradingView Alert] -->|Webhook POST| API[FastAPI /tv/webhook]
+    API --> VALID{Secret / Symbol / Timeframe 검증}
+    VALID --> DB[(SQLite)]
     DB --> EXE[Order Executor]
-    EXE -->|주문| BINANCE[Binance Futures API]
-    EXE -->|메트릭| PROM[Prometheus /metrics]
-    PROM --> GF[Grafana Dashboard\n+ Alert Rules]
-    GF -->|Alert| TG[Telegram]
-    EXE -->|로그| CW[CloudWatch Logs]
-    GHA[GitHub Actions] -->|SSH rsync| EC2[AWS EC2\nSeoul / systemd]
+    EXE --> BINANCE[Binance Futures API]
+    EXE --> PROM[Prometheus /metrics]
+    EXE --> CW[CloudWatch Logs]
+    EXE --> TG[Telegram]
+    PROM --> GF[Grafana Dashboard / Alert]
+    GF --> TG
+    GHA[GitHub Actions] -->|SSH / rsync| EC2[AWS EC2 Seoul / systemd]
     EC2 --> API
 ```
 
-### AWS 공식 아키텍처 다이어그램
 ![AWS Architecture](docs/Architecture/psar_portfolio_aws_architecture.png)
 
-보조 이미지:
-- ![Portfolio Architecture Final](docs/Architecture/portfolio_architecture_final.png)
-- ![Mermaid Architecture](docs/Architecture/Mermaid_Architecture.png)
+## 운영·트러블슈팅 기록
 
----
+### 1. 2025-12-22 systemd 최초 기동 장애
+
+한 가지 원인이 아니라 다음 세 가지 설정 오류가 겹쳤습니다.
+
+1. unit file을 `/etc/systemd/system`이 아닌 `/etc/systmed`에 둔 경로 오타
+2. `ExecStart`가 존재하지 않는 `bot_main.py`를 참조
+3. 실행 옵션이 없어 `run_live()` 대신 `run_paper_test()` 실행 후 종료
+
+조치:
+
+- unit file을 올바른 경로로 이동
+- `ExecStart`를 실제 실행 파일인 `psar_rsi_strategy.py`로 수정
+- `--live --paper --paper-bars 750` 옵션 추가
+- `systemctl daemon-reload`와 restart 후 `Active: active (running)` 확인
+- `RestartSec=10` 적용: FastAPI 기동 약 5초 + 여유 5초
+
+### 2. Binance API 401
+
+실제 인증 장애 발생 후 Public IP 변경과 Binance IP whitelist 불일치를 확인해 수정했습니다. 이후 재발 위험을 줄이기 위해 Elastic IP와 startup 사전 검증 로직을 추가했습니다. 처음부터 예방되어 장애가 없었던 사례가 아닙니다.
+
+### 3. Binance 400/minNotional
+
+2026-01-26 단일 장애 사례에서 18:27:51 오류를 확인했고, 필터·주문 수량 처리를 점검한 뒤 18:31:03 정상 주문 재개를 확인했습니다. 소요 시간은 **이 사례에 한해 3분 12초**이며 평균 장애 해결시간이 아닙니다.
+
+### 4. Oregon 이전 실험
+
+- 비용과 운영 구조 개선을 목적으로 Terraform `apply` 수행
+- EC2, IAM, Security Group, Elastic IP 생성
+- Docker Compose 멀티 컨테이너 기동 시도
+- cloud-init 실패, Amazon Linux 2023 패키지 충돌, 서비스 기동, GHCR private image 인증, 작업 PC Public IP 변경에 따른 SSH Security Group 불일치를 단계적으로 분리 진단
+- 최종적으로 Binance Futures가 Oregon에서 HTTP 451을 반환함을 확인
+
+HTTP 451은 코드나 네트워크 설정만으로 해결할 수 있는 문제가 아니므로 완전 이전이나 멀티리전 프로덕션 운영으로 표현하지 않습니다. 최종 역할은 `서울=PSAR 운영/포트폴리오`, `Oregon=외부 OKX 전략 실험`으로 분리했습니다.
+
+상세 기록: [docs/INCIDENT_RECOVERY.md](docs/INCIDENT_RECOVERY.md)
+
+## Observability
+
+- `/metrics`에서 Webhook, 주문 결과, Binance API 오류, Telegram 전송 지표 노출
+- Prometheus 수집 및 Grafana 대시보드 구성
+- Grafana Alert Rule과 Telegram Contact Point 구성
+- CloudWatch Logs Insights로 런타임 로그 조회
+- systemd의 프로세스 실패 시 자동 재시작 정책과 모니터링 알림을 별도 계층으로 구성
+
+> Grafana 알림이 systemd 재시작을 직접 실행한다고 일반화하지 않습니다. 자동 재시작은 systemd 정책, 이상 감지와 운영자 통지는 Prometheus/Grafana/Telegram의 역할입니다.
+
+## 비용 최적화
+
+- 과거 AWS 비용: 월 4만원대
+- 최근 대표 비용: 약 6,000원
+- 절감 폭: 약 85%
+- 수행 조치: AMI 백업, 불필요 EC2 Terminate, Elastic IP 정리
+- 확인한 운영 특성: EC2가 Stop 상태여도 EBS와 EIP 관련 비용이 남을 수 있음
+
+비용 분석 도구: [`scripts/cost_optimizer.py`](scripts/cost_optimizer.py)
+
+## Kubernetes 범위
+
+이 디렉터리의 매니페스트와 별도 `k8s-msa` 프로젝트를 통해 Minikube 로컬 환경에서 다음 항목을 검증했습니다.
+
+- Deployment / StatefulSet / Service / ConfigMap
+- Liveness / Readiness Probe와 Resource Limit
+- Kustomize dev/prod overlay
+- Terraform 기반 VPC/EKS/ECR 구성 작성 및 `terraform plan`
+
+AWS 범위는 Terraform 구성 작성과 `plan` 검증에서 종료했으며 실제 EKS `apply`는 수행하지 않았습니다. 자세한 두 번째 프로젝트는 [../k8s-msa/README.md](../k8s-msa/README.md)를 참고합니다.
 
 ## Tech Stack
 
-| Component | Technology |
+| 영역 | 기술 |
 |---|---|
-| **Infra** | AWS EC2, IAM, Security Groups, CloudWatch |
-| **IaC** | Terraform |
-| **Runtime** | Python 3.11, FastAPI, uvicorn |
-| **Monitoring** | Prometheus, Grafana, CloudWatch Logs |
-| **Alerting** | Telegram Bot (Grafana contact point) |
-| **CI/CD** | GitHub Actions → SSH/rsync → systemd |
-| **Container** | Docker, Docker Compose |
-| **Orchestration** | Kubernetes (Minikube, dev/prod overlay) — [`k8s/`](k8s/) |
-| **Data** | SQLite |
-| **Cost Opt.** | CloudWatch-based auto analyzer — [`scripts/cost_optimizer.py`](scripts/cost_optimizer.py) |
+| Cloud / IaC | AWS EC2, IAM, Security Group, Elastic IP, CloudWatch, Terraform |
+| Runtime | Linux, systemd, Python 3.11, FastAPI, uvicorn |
+| CI/CD | GitHub Actions, SSH, rsync |
+| Observability | Prometheus, Grafana, CloudWatch Logs, Telegram |
+| Data | SQLite |
+| Experiment | Docker, Docker Compose, Kubernetes(Minikube), Kustomize |
 
----
+## Evidence & Operations Docs
 
-## Key Metrics
-
-| Metric | Value |
-|---|---|
-| Avg incident resolution | **2m 12s** |
-| Redeployment failure rate | **0%** |
-| Uptime | **3+ months continuous** |
-| Monthly cost (dormant mode) | **$0** (AMI snapshot → instance off) |
-| Auto-recovery coverage | **100%** (systemd + Grafana alert rules) |
-
----
-
-## Incident Recovery
-
-자동 복구 정책은 별도 문서에 정리되어 있습니다.  
-→ [docs/INCIDENT_RECOVERY.md](docs/INCIDENT_RECOVERY.md)
-
-| # | Incident | Resolution | Type |
-|---|---|---|---|
-| 1 | systemd restart loop | `RestartSec=3m 12s` 적용 | Auto-repair ✅ |
-| 2 | Webhook no traffic > 1 min | Prometheus alert → systemd restart + Telegram | Auto-recover ✅ |
-| 3 | Binance API 401 (IP whitelist) | API 호출 레이어 사전 검증 로직 삽입 | Prevented ✅ |
-
----
-
-## Monitoring & Observability
-
-### Prometheus Metrics (GET /metrics)
-- `webhook_received_total`
-- `webhook_result_total`
-- `webhook_process_seconds`
-- `order_result_total` / `order_skip_total`
-- `binance_api_error_total`
-- `telegram_send_total`
-
-### Grafana Alert Rules
-| # | Alert | Threshold | Action |
-|---|---|---|---|
-| 1 | Webhook received = 0 | 1 min | systemd restart + Telegram |
-| 2 | Order execution failed | Immediate | Retry logic + Telegram |
-| 3 | API auth error | Immediate | Whitelist check + Telegram |
-| 4 | Telegram delivery | Immediate | Contact point failover |
-
-증빙:
-
-| | |
-|---|---|
-| ![Prometheus Targets UP](docs/monitoring/prometheus_targets_up.jpg) | ![Grafana Alert Rules](docs/monitoring/grafana_alert_rules.jpg) |
-| ![Grafana Dashboards](docs/monitoring/Grafana_Dashboards.jpg) | ![Telegram Trade](docs/Telegram_trade.jpg) |
-
----
-
-## Cost Optimization
-
-CloudWatch 기반 인스턴스 비용 자동 분석 스크립트 (주 1회 cron 실행).  
-→ [`scripts/cost_optimizer.py`](scripts/cost_optimizer.py)
-
-- 지난 30일 EC2 CPU / Memory / Network 사용률 수집
-- 현재 인스턴스 vs 추천 타입 비교 (t3.small → t3.micro / Spot 전환 등 3가지 옵션)
-- CPU spike 패턴·Downtime risk 기반 안전성 검증
-- HTML 리포트 생성 + Slack 월간 요약 자동 발송
-- **최종 변경 결정은 수동 승인** (자동 실행 없음)
-
----
-
-## Kubernetes Migration (Minikube)
-
-기존 Docker Compose 구조를 Kubernetes로 마이그레이션한 매니페스트.  
-→ [`k8s/`](k8s/)
-
-```
-k8s/
-├── deployment.yaml      # FastAPI 앱 (Liveness + Readiness probe, Resource limits)
-├── statefulset.yaml     # Prometheus + Grafana (PVC 기반 데이터 영속성)
-├── service.yaml         # NodePort (외부) / ClusterIP (내부) 노출
-├── configmap.yaml       # 환경 변수 (비밀 제외)
-├── secrets.yaml         # Binance API key, Telegram token (base64)
-└── kustomization.yaml   # dev / prod 환경 분리 (kustomize overlay)
-```
-
-- 기존 `docker-compose.yml`과 1:1 구조 매핑
-- Resource limits (CPU/Memory) 명시
-- Liveness + Readiness probe 포함
-- dev / prod 오버레이 분리
-
----
-
-## Deployment & Operations
-
-### CI/CD Flow
-```
-GitHub Push → GitHub Actions (ci.yml) → SSH rsync to EC2 → systemd restart
-```
-
-### Nightly Backup (Cron, 00:00)
-소스코드 + 매매 로그 → S3 자동 백업  
-→ [`scripts/nightly_s3_backup.sh`](scripts/nightly_s3_backup.sh)
-
-### Operations Docs
-- [docs/INCIDENT_RECOVERY.md](docs/INCIDENT_RECOVERY.md) — 장애 자동 복구 정책
-- [docs/K8S_RUNBOOK.md](docs/K8S_RUNBOOK.md) — Minikube 실행 가이드 + Daily Commands
-- [docs/K8S_ESSENTIAL.md](docs/K8S_ESSENTIAL.md) — K8s 핵심 개념 (면접 대비)
-- [docs/operations_checklist.md](docs/operations_checklist.md)
-- [docs/nightly_s3_backup.md](docs/nightly_s3_backup.md)
-
----
-
-## Getting Started
-
-```bash
-# 1. 환경 변수 설정
-cp ../.env.example ../.env
-# .env 편집: BINANCE_API_KEY, TELEGRAM_BOT_TOKEN, WEBHOOK_SECRET 등
-
-# 2. Docker Compose (기존)
-docker compose up -d
-curl http://localhost:8000/health
-
-# 3. Kubernetes (Minikube)
-minikube start
-kubectl apply -k k8s/
-kubectl get pods -n trading
-
-# 4. 비용 최적화 분석 (사전: EC2_INSTANCE_ID, AWS 자격증명 설정)
-export EC2_INSTANCE_ID=i-xxxxxxxxxxxxxxxxx
-python scripts/cost_optimizer.py
-```
-
----
+- [Grafana / Prometheus 구성](deploy/monitoring/README.md)
+- [장애 대응 기록](docs/INCIDENT_RECOVERY.md)
+- [서울 서버 복구 체크리스트](docs/seoul_portfolio_recovery_checklist.md)
+- [운영 체크리스트](docs/operations_checklist.md)
+- [Terraform 인프라 실험](../infra/terraform/README.md)
 
 ## Known Constraints
 
-| Constraint | Detail |
+| 항목 | 사실 기준 |
 |---|---|
-| Oregon region Binance 451 | Binance Futures는 Oregon 리전 접근 차단 → Seoul 고정 |
-| Kubernetes | Minikube 기반 (프로덕션 클라우드 클러스터 미배포) |
-| Strategy scope | 전략 수익성보다 **인프라 운영 역량 증명**이 목적 |
-
----
-
-## Problem-Solving History
-
-| Problem | Solution |
-|---|---|
-| TradingView 복제 오차 → 0체결 | Webhook Executor 구조로 분리 |
-| TradingView payload 해석 오류 | `order_action + position_size` 기준 재정의 |
-| 주문 필터 미충족 | Binance `minNotional / stepSize / tickSize` 사전 검증 로직 |
-| 네트워크 이슈 vs 앱 이슈 구분 | 보안그룹·포트·경로·리스닝 상태 단계별 분리 진단 |
-| Oregon Binance 451 제약 | 리전 제약 확인 후 역할 재정의 (Seoul=PSAR, Oregon=OKX) |
-| systemd 무한 재시작 루프 | `RestartSec=192` 적용 |
+| 프로젝트 기간 | 2025-12-22 최초 배포, 2026-09 기준 약 9개월 |
+| 연속 가동 | 전체 프로젝트 기간과 별도이며 절대 uptime 수치로 표현하지 않음 |
+| 자동 복구 | systemd 재시작 정책 구성; 모든 장애의 자동 복구를 의미하지 않음 |
+| Oregon | 이전·멀티 컨테이너 실험 환경, 완전 마이그레이션 아님 |
+| Kubernetes | Minikube 배포 검증 |
+| EKS | Terraform plan까지만 검증, 실제 구축·운영 없음 |

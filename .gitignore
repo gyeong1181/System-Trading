@@ -40,10 +40,16 @@ crash.log
 # Reports / temporary files / backups
 reports/
 backups/
+backtest_results.png
+k8s-msa.zip
 *.bak
 *.tmp
 .reverse_tools/
 pytest-cache-files-*/
+
+# Local tools and unrelated project workspaces
+.claude/
+ai_invest_crew/
 
 # OS files
 .DS_Store

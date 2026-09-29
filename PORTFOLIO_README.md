@@ -1,22 +1,24 @@
 # gyeong1181 | Cloud / DevOps / Infra Portfolio
 
-실제로 운영 가능한 자동화 시스템을 직접 구축하고, 리전 제약과 비용 문제를 검토해 구조를 분리 운영한 프로젝트 저장소입니다.
+실제로 운영 가능한 자동화 시스템을 직접 구축하고, AWS EC2 운영, Linux/systemd 장애 대응, GitHub Actions 배포 자동화, Prometheus/Grafana/CloudWatch 모니터링, Terraform 인프라 구성, Docker Compose 실험, Kubernetes Minikube 학습까지 경험한 Cloud / Infrastructure / DevOps 신입 지원자의 포트폴리오입니다.
+
+자동매매는 문제를 해결한 도메인이고, 포트폴리오의 중심은 수익률이 아니라 **운영·트러블슈팅·IaC·모니터링 경험**입니다. AWS EC2 최초 배포일은 2025-12-22이며, 2026-09 기준 전체 프로젝트 경험은 약 9개월입니다. 전체 프로젝트 기간과 특정 프로세스의 연속 가동 기간은 구분합니다.
 
 이 저장소의 핵심은 특정 전략의 수익을 과장하는 것이 아니라, 아래를 실제로 수행했다는 점입니다.
 
 - Webhook 기반 자동 주문 실행기 구축
-- AWS EC2 / systemd / Docker Compose 운영
+- AWS EC2 / systemd 기반 서울 운영 환경 구성
 - GitHub Actions 기반 CI/CD
 - Prometheus / Grafana / Telegram / CloudWatch 기반 관측
 - Terraform으로 신규 리전 인프라 생성
 - 거래소/리전 제약을 확인한 뒤 서버 역할 재설계
-- 비용 절감을 고려한 멀티 컨테이너 운영 구조 검토
+- Oregon에서 비용 절감을 고려한 Docker Compose 멀티 컨테이너 운영 실험
 
 ---
 
 ## 현재 선택한 운영 구조
 
-이 프로젝트는 현재 두 서버 역할을 명확히 분리하는 방향으로 정리했습니다.
+이 프로젝트는 두 리전의 역할을 명확히 분리해 정리했습니다.
 
 ### Seoul Region
 - 역할: 포트폴리오용 운영 시스템
@@ -28,12 +30,12 @@
   - 운영 가능한 시스템 구축 경험을 보여주는 포트폴리오 자산
 
 ### Oregon Region
-- 역할: 외부 전략 전용 멀티 컨테이너 서버
+- 역할: 외부 OKX 전략 전용 Terraform/Docker Compose 실험 환경
 - 대상: 탈개미AI OKX 전략 2종
 - 목적:
-  - Docker 멀티 컨테이너 운영
+  - Docker 멀티 컨테이너 기동 및 운영 가능성 검증
   - Terraform 기반 리전 이전 / 인프라 재현
-  - 외부 전략 실운용과 서버 분리 경험 축적
+  - 외부 전략의 리전 적합성과 서버 분리 경험 축적
 
 ### Why This Split
 - Oregon에서 Binance Futures 접근 시 `451` 제약을 확인
@@ -76,8 +78,8 @@ TradingView Webhook 신호를 받아 FastAPI 서버에서 검증하고, Binance 
 - Telegram 체결/오류 알림
 - `/metrics` 기반 Prometheus 수집
 
-### 2. Oregon Multi-Container Stack
-Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 멀티 컨테이너 형태로 운영하는 구조입니다.
+### 2. Oregon Multi-Container Experiment
+Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 Docker Compose로 기동하고 운영 가능성을 검증한 실험입니다.
 
 - 구성: `Terraform`, `Docker Compose`, `AWS SSM Parameter Store`, `GHCR`, `Docker Hub`
 - 대상 컨테이너:
@@ -86,13 +88,17 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 - 의미:
   - 리전 이전 경험
   - 인프라 재현 경험
-  - 멀티 컨테이너 운영 경험
+  - 멀티 컨테이너 기동·문제 분리 경험
   - 비용 절감 관점의 서버 통합 검토 경험
   - 외부 전략 컨테이너를 Render 외 환경으로 이전 시도하며, 실제 운영 적합성을 검토한 경험
 
 정리:
 - "완전 이전 성공"을 과장하지 않음
 - 대신 Terraform 기반 이전, 멀티 컨테이너 구동, 런타임 병목 추적, 제약 확인, 구조 재조정까지 실제로 수행한 경험으로 설명
+
+### 3. Kubernetes & IaC Learning Track
+
+별도 [k8s-msa/](k8s-msa/README.md) 프로젝트에서 FastAPI 기반 MSA를 Minikube에 배포·검증하고 Prometheus/Grafana/HPA를 구성했습니다. Terraform 기반 VPC/EKS/ECR 구성은 작성 및 `plan` 검증 범위이며, 실제 EKS `apply`와 운영 경험으로 표현하지 않습니다.
 
 ---
 
@@ -104,8 +110,9 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 
 ![AWS Architecture](psar_rsi_bot/docs/Architecture/psar_portfolio_aws_architecture.png)
 
-### Final Portfolio Architecture
-![Portfolio Architecture](psar_rsi_bot/docs/Architecture/portfolio_architecture_final.png)
+### Region Role Split
+
+서울 운영 환경과 Oregon 실험 환경의 역할은 [server_role_split.md](psar_rsi_bot/docs/Architecture/server_role_split.md)와 [Mermaid 초안](psar_rsi_bot/docs/Architecture/portfolio_architecture_mermaid_draft.md)을 기준으로 설명합니다.
 
 ### CloudWatch Logs Insights
 ![CloudWatch Logs Insights](psar_rsi_bot/docs/cloudwatch_insights2.png)
@@ -132,17 +139,13 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 
 ## 비용 관리 관점
 
-과거에는 Render에서 전략 컨테이너를 분산 운영했고, 컨테이너 3개 기준 월 약 21,000원 수준의 서버 비용이 발생했습니다.
+- 과거 AWS 비용: 월 4만원대
+- 최근 대표 비용: 약 6,000원
+- 절감 폭: 약 85%
+- 조치: AMI 백업, 불필요 EC2 Terminate, Elastic IP 정리
+- 확인 사항: Stop 상태에서도 EBS와 EIP 관련 비용이 남을 수 있음
 
-이후 아래 방향으로 재설계를 시도했습니다.
-
-- 전략별 분산 서버 운영을 재검토
-- 외부 전략 2종을 AWS 단일 인스턴스 멀티 컨테이너 구조로 통합
-- 비용 절감과 운영 복잡도 감소를 동시에 노림
-
-이 과정에서 "무조건 한 서버에 다 올린다"가 아니라, 거래소/리전 제약까지 확인한 뒤 최종적으로 서버 역할을 분리했습니다.
-
-즉, 비용 절감 시도 자체도 했고, 그 한계도 확인한 뒤 구조를 다시 조정했습니다.
+비용 절감을 위해 AWS 단일 인스턴스 멀티 컨테이너 구조도 검토했지만, 거래소의 지역 제약과 운영 적합성을 확인한 뒤 서울 PSAR 환경과 Oregon 외부 OKX 전략 실험 환경으로 역할을 분리했습니다.
 
 ---
 
@@ -153,6 +156,9 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 - Binance 최소 주문/필터 오류를 수량 정규화와 사전 검증으로 차단
 - 보안그룹, 포트 매핑, Webhook 경로 문제를 분리해 네트워크/앱 계층 구분
 - `prometheus_client`, systemd, 경로/권한 이슈를 정리해 상시 구동 구조 안정화
+- 2025-12-22 systemd 최초 장애에서 unit 경로 오타, 잘못된 `ExecStart`, 실행 옵션 누락을 수정하고 `Active: active (running)` 확인
+- Public IP 변경으로 발생한 Binance API 401/IP whitelist 장애를 수정하고 Elastic IP와 startup 사전 검증 로직 추가
+- 2026-01-26 Binance 400/minNotional 단일 장애를 18:27:51부터 18:31:03까지 대응(단일 사례 3분 12초, 평균값 아님)
 - Terraform `apply` 후 cloud-init, SSM sync, GHCR private pull, Docker Compose startup 병목을 실제로 추적
 - Oregon 리전에서 Binance Futures `451` 제약을 확인하고, PSAR를 포트폴리오 시스템으로 서울에 유지하는 방향으로 구조 재조정
 - 외부 vendor Docker 2종을 Oregon으로 이전해 멀티 컨테이너 운용까지 시도했지만, 해당 컨테이너가 Render 중심 운영 흐름에 더 최적화되어 있어 장기 유지보다는 구조 검증 경험으로 정리
@@ -212,11 +218,10 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 - 이 문서: 저장소 전체 포트폴리오 개요
 - [psar_rsi_bot/README.md](psar_rsi_bot/README.md): PSAR 실행기 기술 문서
 - [server_role_split.md](psar_rsi_bot/docs/Architecture/server_role_split.md): 서울/오리건 서버 분리 아키텍처
-- [portfolio_architecture_final.png](psar_rsi_bot/docs/Architecture/portfolio_architecture_final.png): 최종 포트폴리오 아키텍처 도면
+- `portfolio_architecture_final.png`: Oregon 영역의 기존 “Multi-container operation validated” 문구가 현재 사실 기준보다 강하므로 재생성 전까지 포트폴리오 본문에서 제외 (`REVIEW_REQUIRED`)
 - [portfolio_architecture_mermaid_draft.md](psar_rsi_bot/docs/Architecture/portfolio_architecture_mermaid_draft.md): 포트폴리오용 Mermaid 아키텍처 초안
 - [2026-03-17_region_role_split.md](psar_rsi_bot/docs/decision_log/2026-03-17_region_role_split.md): 기술적 의사결정 로그
 - [seoul_portfolio_recovery_checklist.md](psar_rsi_bot/docs/seoul_portfolio_recovery_checklist.md): 서울 포트폴리오 서버 재가동 체크리스트
-- [job_targets/README.md](psar_rsi_bot/docs/job_targets/README.md): 취업용 설명 포인트
 - [infra/terraform/README.md](infra/terraform/README.md): Terraform 사용 가이드
 
 ---
@@ -239,13 +244,13 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 
 ## Contact
 
-- Email: `gyeong1181@gmail.com`
+- Email: `gyeong1181@naver.com`
 
 ---
 
 ## Nightly Backup
 
-운영 자동화의 일부로 서울 서버 기준 `소스 코드 + 매매 로그`를 매일 밤 12시에 S3로 백업하는 스크립트와 crontab 예시를 추가했습니다.
+서울 서버용 `소스 코드 + 매매 로그` S3 백업 스크립트와 crontab 예시를 작성했습니다. 실제 운영 서버의 cron 등록·실행 증빙은 이 저장소에서 확인되지 않으므로, 정기 백업 운영 실적으로 단정하지 않습니다.
 
 - Script: `psar_rsi_bot/scripts/nightly_s3_backup.sh`
 - Crontab: `psar_rsi_bot/scripts/nightly_s3_backup.crontab.example`
@@ -255,16 +260,16 @@ Terraform으로 생성한 Oregon EC2에서 외부 vendor 전략 컨테이너를 
 
 ---
 
-## 📦 서버 비용 최적화 기록 (2026-06-15)
+## 📦 서버 비용 최적화 기록
 
 **조치 사항**: 자동매매 EC2 서버 비용 최적화를 위해 아래 조치를 실행하였음.
 
 | 항목 | 내용 |
 |---|---|
-| 기존 상태 | EC2 중지(Stop) 상태 → 월 1.7만원 청구 중 |
-| 원인 | EBS 스토리지 + Elastic IP 미사용 과금 |
-| 조치 | AMI 백업(system-trading-backup-20260615) → EC2 완전 종료(Terminate) → Elastic IP 릴리스 |
-| 결과 | 월 1~2천원 수준으로 감소 |
+| 기존 상태 | 과거 AWS 비용 월 4만원대 |
+| 원인 | 실행 중이거나 불필요한 EC2와 Stop 상태에서도 남을 수 있는 EBS/EIP 관련 비용 |
+| 조치 | AMI 백업 → 불필요 EC2 Terminate → Elastic IP 정리 |
+| 최근 대표 결과 | 약 6,000원, 약 85% 절감 |
 
 **재운용 시**: AMI에서 새 인스턴스 시작 → 기존 환경 그대로 복원 가능
 

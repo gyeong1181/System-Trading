@@ -1,6 +1,6 @@
 # Nightly S3 Backup
 
-서울 서버 기준으로 매일 밤 12시에 소스 코드와 매매 로그를 S3로 자동 백업하는 구성이다.
+서울 서버에서 매일 밤 12시에 소스 코드와 매매 로그를 S3로 백업할 수 있도록 작성한 스크립트와 crontab 예시다. 이 저장소에는 실제 서버의 cron 등록·실행 로그 증빙이 없으므로, 운영 완료가 아닌 자동화 구성으로 설명한다.
 
 ## Included
 - Source code under `/home/ec2-user/systemTrading`
@@ -56,4 +56,4 @@ tail -f /home/ec2-user/backups/nightly/cron.log
 - The EC2 instance role, or local AWS credentials, must allow `s3:PutObject`.
 
 ## Portfolio Note
-이 구성은 운영 중인 자동매매 시스템에 대해 정기 보존 정책을 직접 구성했다는 점을 보여준다.
+이 구성은 운영 환경에 적용할 수 있는 정기 보존 자동화 스크립트와 등록 절차를 문서화한 것이다.
